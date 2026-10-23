@@ -1,0 +1,114 @@
+services:
+  python-runner:
+    image: python:3.11-slim
+    container_name: python-runner
+    command: tail -f /dev/null  # 保持常驻
+    networks:
+      - app_network
+    # 关键：这里只挂载脚本目录，绝不挂载宿主机根目录，保证安全隔离
+    volumes:
+      - ./ai_scripts:/app/scripts:rw
+    # 安全限制：限制资源，防止 AI 写个死循环把宿主机 CPU 跑满
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    restart: unless-stopped
+  spring-app:
+    build: .  # 这里表示使用当前目录的 Dockerfile 构建
+    container_name: spring-app
+    ports:
+      - "8080:8080"
+    environment:
+      # 这里可以通过环境变量覆盖 application.yml 里的配置，确保连的是 mysql 容器
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/humanoid?useUnicode=true&characterEncoding=utf-8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=root
+      # DeepSeek API Key，从 .env 读取
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+    networks:
+      - app_network
+    volumes:
+      # AI 文件工具的沙箱目录（可读写）
+      - ./bot_files:/app/files:rw
+    depends_on:
+      mysql:
+        condition: service_healthy # 等你配置好 mysql 的 healthcheck 后加上这句
+  # QQ 客户端（Linux 版），Xvfb 虚拟显示，无 GUI 窗口
+  pmhq:
+    image: linyuchen/pmhq:latest
+    container_name: pmhq
+    privileged: true
+    environment:
+      - AUTO_LOGIN_QQ=
+      - PMHQ_AUTH_TOKEN=${PMHQ_AUTH_TOKEN:-}
+    volumes:
+      - qq_volume:/root/.config/QQ
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:13000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # LLBot，寄生在 pmhq 上
+  llbot:
+    image: linyuchen/llbot:latest
+    container_name: llbot
+    ports:
+      - "3080:3080"   # WebUI
+      - "3000:3000"   # OneBot 11 HTTP 服务端（在 WebUI 里启用后生效）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - WEBUI_PORT=3080
+      - PROTOCOL_MODE=pmhq
+      - PMHQ_HOST=pmhq
+    networks:
+      - app_network
+    volumes:
+      - ./llbot_config:/app/llbot/data:rw
+    depends_on:
+      - pmhq
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:'+(process.env.WEBUI_PORT||3080)).then(()=>process.exit(0),()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MySQL（与 application.properties 保持一致：库 humanoid / root / root）
+  mysql:
+    image: mysql:8.0
+    container_name: my-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: humanoid
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  qq_volume:
+  mysql_data:
+
+networks:
+  app_network:
+    driver: bridge
