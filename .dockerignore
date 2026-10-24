@@ -1,0 +1,13 @@
+target
+.git
+.idea
+.mvn
+llbot_config
+bot_files
+llonebot
+playwright_output
+ai_scripts
+frontend/node_modules
+frontend/dist
+src/main/resources/static/admin
+*.log

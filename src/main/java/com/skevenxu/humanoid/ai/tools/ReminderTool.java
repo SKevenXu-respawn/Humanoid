@@ -12,7 +12,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
-/** 定时提醒工具：AI 设置时间与内容，到点后由 ReminderService 发送。 */
+/** 定时提醒工具：AI 设置时间与预设提示词，到点后由 ReminderService 交给主 AI 执行。 */
 @Component
 public class ReminderTool {
 
@@ -20,7 +20,7 @@ public class ReminderTool {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter SECOND = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-    private static final int MAX_CONTENT = 500;
+    private static final int MAX_CONTENT = 1000;
 
     private final BotReminderMapper reminderMapper;
 
@@ -31,7 +31,8 @@ public class ReminderTool {
     @Tool(description = """
             为用户设置定时提醒。remindAt 格式为 yyyy-MM-dd HH:mm（北京时间）。
             如果用户说的是相对时间（如「十分钟后」「明天早上」），请先调用 currentTime 工具获取当前时间再计算。
-            message 是到点后要发送给用户的内容。""")
+            message 是预设提示词：到点后会把这条提示交给主 AI 执行（可以调用工具），由 AI 决定最终发给用户的回复。
+            所以请写清楚到点后要做什么，而不是只写一句要发出去的提醒语。""")
     public String scheduleReminder(String remindAt, String message) {
         ToolContext.ChatScope scope = ToolContext.get();
         if (scope == null) {
@@ -67,7 +68,7 @@ public class ReminderTool {
 
         log.info("工具调用 scheduleReminder user_id={} id={} remind_at={}",
                 scope.userId(), reminder.getId(), time);
-        return "已设置提醒，将在 " + time.format(MINUTE) + " 发送：" + reminder.getContent();
+        return "已设置提醒，将在 " + time.format(MINUTE) + " 交给主 AI 处理：" + reminder.getContent();
     }
 
     private static LocalDateTime parse(String text) {

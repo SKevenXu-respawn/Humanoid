@@ -1,5 +1,8 @@
 package com.skevenxu.humanoid.ai;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
 import com.skevenxu.humanoid.entity.BotToolCall;
 import com.skevenxu.humanoid.mapper.BotToolCallMapper;
@@ -8,10 +11,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.ai.tool.metadata.ToolMetadata;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.Locale;
 
 /** 包装所有工具回调，把调用参数和结果写入 bot_tool_call。 */
@@ -20,13 +26,25 @@ public class ToolCallLogger {
 
     private static final Logger log = LoggerFactory.getLogger(ToolCallLogger.class);
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    private static final Gson GSON = new Gson();
     private static final int MAX_ARGUMENTS = 500;
     private static final int MAX_RESULT = 1000;
 
     private final BotToolCallMapper toolCallMapper;
+    private final ToolResultPostProcessor postProcessor;
+    private final ToolProgressNotifier progressNotifier;
+    private final String playwrightOutputDir;
 
-    public ToolCallLogger(BotToolCallMapper toolCallMapper) {
+    public ToolCallLogger(BotToolCallMapper toolCallMapper,
+                          ToolResultPostProcessor postProcessor,
+                          ToolProgressNotifier progressNotifier,
+                          @Value("${humanoid.tools.playwright-output-dir:/app/output}") String playwrightOutputDir) {
         this.toolCallMapper = toolCallMapper;
+        this.postProcessor = postProcessor;
+        this.progressNotifier = progressNotifier;
+        this.playwrightOutputDir = playwrightOutputDir.endsWith("/")
+                ? playwrightOutputDir.substring(0, playwrightOutputDir.length() - 1)
+                : playwrightOutputDir;
     }
 
     public ToolCallback[] wrap(ToolCallback[] callbacks) {
@@ -66,6 +84,31 @@ public class ToolCallLogger {
         }
     }
 
+    private record ScreenshotCall(String input, String filename) {
+    }
+
+    /** 截图工具统一注入唯一文件名，避免并发用户互相覆盖，也便于把文件移动到用户目录。 */
+    private ScreenshotCall prepareScreenshot(String toolName, String toolInput) {
+        if (toolName == null || !toolName.toLowerCase(Locale.ROOT).contains("screenshot")) {
+            return new ScreenshotCall(toolInput, null);
+        }
+        try {
+            JsonObject args = JsonParser.parseString(
+                    toolInput == null || toolInput.isBlank() ? "{}" : toolInput).getAsJsonObject();
+            String type = args.has("type") && !args.get("type").isJsonNull()
+                    ? args.get("type").getAsString().toLowerCase(Locale.ROOT) : "png";
+            String extension = type.contains("jpeg") || type.equals("jpg") ? ".jpg" : ".png";
+            String filename = "shot-" + System.currentTimeMillis() + "-"
+                    + UUID.randomUUID().toString().substring(0, 8) + extension;
+            String containerPath = playwrightOutputDir + "/" + filename;
+            // 显式文件名不会被 Playwright 放进 output-dir，必须传容器内的绝对路径
+            args.addProperty("filename", containerPath);
+            return new ScreenshotCall(GSON.toJson(args), containerPath);
+        } catch (Exception e) {
+            return new ScreenshotCall(toolInput, null);
+        }
+    }
+
     private static boolean isNetworkTool(String toolName) {
         if (toolName == null) {
             return false;
@@ -95,16 +138,28 @@ public class ToolCallLogger {
 
         @Override
         public String call(String toolInput) {
-            String result = PromptSanitizer.clean(delegate.call(toolInput));
-            record(delegate.getToolDefinition().name(), toolInput, result);
+            String toolName = delegate.getToolDefinition().name();
+            ScreenshotCall call = prepareScreenshot(toolName, toolInput);
+            String result;
+            try (ToolProgressNotifier.ToolExecution ignored = progressNotifier.toolStarted(toolName)) {
+                result = PromptSanitizer.clean(delegate.call(call.input()));
+            }
+            result = postProcessor.process(toolName, result, call.filename());
+            record(toolName, call.input(), result);
             return result;
         }
 
         @Override
         public String call(String toolInput,
                            org.springframework.ai.chat.model.ToolContext toolContext) {
-            String result = PromptSanitizer.clean(delegate.call(toolInput, toolContext));
-            record(delegate.getToolDefinition().name(), toolInput, result);
+            String toolName = delegate.getToolDefinition().name();
+            ScreenshotCall call = prepareScreenshot(toolName, toolInput);
+            String result;
+            try (ToolProgressNotifier.ToolExecution ignored = progressNotifier.toolStarted(toolName)) {
+                result = PromptSanitizer.clean(delegate.call(call.input(), toolContext));
+            }
+            result = postProcessor.process(toolName, result, call.filename());
+            record(toolName, call.input(), result);
             return result;
         }
     }

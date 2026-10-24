@@ -1,19 +1,38 @@
 services:
-  python-runner:
-    image: python:3.11-slim
-    container_name: python-runner
-    command: tail -f /dev/null  # 保持常驻
+  # 浏览器自动化：Playwright MCP（无头 Chromium，仅容器内网）
+  playwright:
+    image: mcr.microsoft.com/playwright/mcp:latest
+    container_name: playwright-mcp
+    # 以 root 运行，保证能写入 bind mount 的输出目录（容器内仍受资源限制）
+    user: "0:0"
+    # 镜像默认入口已包含 node /app/cli.js --headless --browser chromium --no-sandbox
+    command:
+      - --port
+      - "8931"
+      - --host
+      - 0.0.0.0
+      - --allowed-hosts
+      - "playwright:8931,localhost:8931,127.0.0.1:8931"
+      - --output-dir
+      - /app/output
     networks:
       - app_network
-    # 关键：这里只挂载脚本目录，绝不挂载宿主机根目录，保证安全隔离
     volumes:
-      - ./ai_scripts:/app/scripts:rw
-    # 安全限制：限制资源，防止 AI 写个死循环把宿主机 CPU 跑满
-    deploy:
-      resources:
-        limits:
-          cpus: '1.0'
-          memory: 512M
+      # 截图等输出文件，与 spring-app 共享
+      - ./playwright_output:/app/output
+    expose:
+      - "8931"
+    shm_size: 1gb
+    mem_limit: 2g
+    cpus: 2.0
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:8931/mcp').then(()=>process.exit(0)).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
     restart: unless-stopped
   spring-app:
     build: .  # 这里表示使用当前目录的 Dockerfile 构建
@@ -27,14 +46,21 @@ services:
       - SPRING_DATASOURCE_PASSWORD=root
       # DeepSeek API Key，从 .env 读取
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # 豆包语音合成 Key，从 .env 读取
+      - VOICE_API_KEY=${VOICE_API_KEY:-}
     networks:
       - app_network
     volumes:
       # AI 文件工具的沙箱目录（可读写）
       - ./bot_files:/app/files:rw
+      # Playwright MCP 输出目录（截图会移入用户目录）
+      - ./playwright_output:/app/mcp-output:rw
     depends_on:
       mysql:
         condition: service_healthy # 等你配置好 mysql 的 healthcheck 后加上这句
+      playwright:
+        condition: service_healthy
+    restart: unless-stopped
   # QQ 客户端（Linux 版），Xvfb 虚拟显示，无 GUI 窗口
   pmhq:
     image: linyuchen/pmhq:latest

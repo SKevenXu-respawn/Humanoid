@@ -1,7 +1,6 @@
 package com.skevenxu.humanoid.config;
 
 import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
@@ -16,9 +15,15 @@ import java.util.List;
 @Configuration
 public class JsonConfig implements WebMvcConfigurer {
 
+    private final Gson gson;
+
+    public JsonConfig(Gson gson) {
+        this.gson = gson;
+    }
+
     @Override
     public void extendMessageConverters(List<HttpMessageConverter<?>> converters) {
         converters.removeIf(GsonHttpMessageConverter.class::isInstance);
-        converters.add(0, new GsonHttpMessageConverter(new GsonBuilder().create()));
+        converters.add(0, new GsonHttpMessageConverter(gson));
     }
 }

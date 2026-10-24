@@ -5,6 +5,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
+import com.skevenxu.humanoid.ai.voice.VoiceConfigService;
 import com.skevenxu.humanoid.entity.BotContext;
 import com.skevenxu.humanoid.entity.BotConversation;
 import com.skevenxu.humanoid.entity.BotToolCall;
@@ -20,6 +21,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
@@ -49,6 +51,9 @@ public class AiChatService {
     private final HumanoidTools humanoidTools;
     private final TaskTool taskTool;
     private final ToolCallLogger toolCallLogger;
+    private final ToolProgressNotifier toolProgressNotifier;
+    private final VoiceConfigService voiceConfigService;
+    private final ObjectProvider<ToolCallbackProvider> toolCallbackProviders;
     private final BotToolCallMapper toolCallMapper;
     private final BotConversationMapper conversationMapper;
     private final ContextStore contextStore;
@@ -67,6 +72,9 @@ public class AiChatService {
                          HumanoidTools humanoidTools,
                          TaskTool taskTool,
                          ToolCallLogger toolCallLogger,
+                         ToolProgressNotifier toolProgressNotifier,
+                         VoiceConfigService voiceConfigService,
+                         ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
                          BotToolCallMapper toolCallMapper,
                          BotConversationMapper conversationMapper,
                          ContextStore contextStore,
@@ -82,6 +90,9 @@ public class AiChatService {
         this.humanoidTools = humanoidTools;
         this.taskTool = taskTool;
         this.toolCallLogger = toolCallLogger;
+        this.toolProgressNotifier = toolProgressNotifier;
+        this.voiceConfigService = voiceConfigService;
+        this.toolCallbackProviders = toolCallbackProviders;
         this.toolCallMapper = toolCallMapper;
         this.conversationMapper = conversationMapper;
         this.contextStore = contextStore;
@@ -106,13 +117,36 @@ public class AiChatService {
         ToolCallbackProvider provider = MethodToolCallbackProvider.builder()
                 .toolObjects(humanoidTools.create(summarizer).toArray())
                 .build();
-        ToolCallback[] callbacks = toolCallLogger.wrap(provider.getToolCallbacks());
+
+        List<ToolCallback> allCallbacks = new ArrayList<>(Arrays.asList(provider.getToolCallbacks()));
+        try {
+            toolCallbackProviders.orderedStream()
+                    .flatMap(p -> Arrays.stream(p.getToolCallbacks()))
+                    .filter(callback -> !"browser_run_code_unsafe"
+                            .equals(callback.getToolDefinition().name()))
+                    .forEach(allCallbacks::add);
+        } catch (Exception e) {
+            log.warn("MCP 工具加载失败（Playwright MCP 可能未就绪），本次启动不注册浏览器工具: {}",
+                    e.toString());
+        }
+
+        ToolCallback[] callbacks = toolCallLogger.wrap(allCallbacks.toArray(ToolCallback[]::new));
         this.toolCallbacks = callbacks;
         List<String> toolNames = Arrays.stream(callbacks)
                 .map(callback -> callback.getToolDefinition().name())
                 .toList();
         log.info("已注册 AI 工具: {}", toolNames);
-        return builder.defaultToolCallbacks(callbacks).build();
+        return builder.build();
+    }
+
+    /** 每次请求时按管理端配置决定是否把 sendVoice 暴露给模型。 */
+    private List<ToolCallback> activeToolCallbacks() {
+        if (voiceConfigService.isEnabled()) {
+            return Arrays.asList(toolCallbacks);
+        }
+        return Arrays.stream(toolCallbacks)
+                .filter(callback -> !"sendVoice".equals(callback.getToolDefinition().name()))
+                .toList();
     }
 
     /** .properties 默认按 ISO-8859-1 解析，中文提示词必须从 UTF-8 资源文件读取。 */
@@ -163,31 +197,40 @@ public class AiChatService {
                     hasImages ? "http" : "spring-ai");
 
             Optional<String> reply;
-            if (hasImages) {
-                ToolContext.set(new ToolContext.ChatScope(
-                        userMessage.getUserId(), userMessage.getMessageType(), userMessage.getGroupId()));
-                try {
-                    reply = deepSeekClient.chat(system, buildNativeMessages(rows, imageMap),
-                            Arrays.asList(toolCallbacks));
-                } finally {
-                    ToolContext.clear();
+            List<ToolCallback> activeCallbacks = activeToolCallbacks();
+            toolProgressNotifier.begin();
+            try {
+                if (hasImages) {
+                    ToolContext.set(new ToolContext.ChatScope(
+                            userMessage.getUserId(), userMessage.getMessageType(),
+                            userMessage.getGroupId(), true));
+                    try {
+                        reply = deepSeekClient.chat(system, buildNativeMessages(rows, imageMap),
+                                activeCallbacks);
+                    } finally {
+                        ToolContext.clear();
+                    }
+                } else {
+                    List<Message> messages = buildSpringMessages(rows);
+                    if (messages.isEmpty()) {
+                        return;
+                    }
+                    ToolContext.set(new ToolContext.ChatScope(
+                            userMessage.getUserId(), userMessage.getMessageType(),
+                            userMessage.getGroupId(), true));
+                    try {
+                        reply = Optional.ofNullable(chatClient.prompt()
+                                .system(system)
+                                .messages(messages)
+                                .toolCallbacks(activeCallbacks)
+                                .call()
+                                .content());
+                    } finally {
+                        ToolContext.clear();
+                    }
                 }
-            } else {
-                List<Message> messages = buildSpringMessages(rows);
-                if (messages.isEmpty()) {
-                    return;
-                }
-                ToolContext.set(new ToolContext.ChatScope(
-                        userMessage.getUserId(), userMessage.getMessageType(), userMessage.getGroupId()));
-                try {
-                    reply = Optional.ofNullable(chatClient.prompt()
-                            .system(system)
-                            .messages(messages)
-                            .call()
-                            .content());
-                } finally {
-                    ToolContext.clear();
-                }
+            } finally {
+                toolProgressNotifier.end();
             }
             if (reply.isEmpty() || reply.get().isBlank()) {
                 log.warn("AI 返回空内容 user_id={}", userMessage.getUserId());

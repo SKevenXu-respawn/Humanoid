@@ -29,6 +29,8 @@ public class DeepSeekClient {
     private static final Logger log = LoggerFactory.getLogger(DeepSeekClient.class);
     private static final Gson GSON = new Gson();
     private static final int MAX_TOOL_RESULT = 6000;
+    /** 配置为 -1（不限制）时的硬保护，避免异常循环无限消耗资源。 */
+    private static final int HARD_MAX_ROUNDS = 1000;
 
     public record ChatMessage(String role, String text, List<String> imageUrls) {
         public static ChatMessage user(String text, List<String> imageUrls) {
@@ -61,7 +63,7 @@ public class DeepSeekClient {
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.apiKey = apiKey;
         this.model = model;
-        this.maxToolRounds = Math.max(1, maxToolRounds);
+        this.maxToolRounds = maxToolRounds;
         if (apiKey == null || apiKey.isBlank()) {
             log.warn("未配置 DeepSeek API Key，请设置环境变量 DEEPSEEK_API_KEY");
         }
@@ -90,7 +92,10 @@ public class DeepSeekClient {
             JsonArray conversation = buildMessages(systemPrompt, messages);
             JsonArray tools = buildToolSchemas(toolCallbacks);
 
-            for (int round = 0; round < maxToolRounds; round++) {
+            int roundLimit = maxToolRounds <= 0
+                    ? HARD_MAX_ROUNDS
+                    : Math.min(maxToolRounds, HARD_MAX_ROUNDS);
+            for (int round = 0; round < roundLimit; round++) {
                 JsonObject body = buildBody(conversation, tools);
 
                 HttpResponse<String> response = send(body);
@@ -128,7 +133,7 @@ public class DeepSeekClient {
                 }
             }
 
-            log.warn("工具调用轮次超过上限 {}", maxToolRounds);
+            log.warn("工具调用轮次超过上限 {}", roundLimit);
             Optional<String> finalAnswer = finalAnswerWithoutTools(conversation);
             return finalAnswer.isPresent()
                     ? finalAnswer

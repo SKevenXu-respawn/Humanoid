@@ -15,6 +15,7 @@ public class BotReminder {
     public static final String STATUS_PENDING = "PENDING";
     public static final String STATUS_SENT = "SENT";
     public static final String STATUS_FAILED = "FAILED";
+    public static final String STATUS_CANCELLED = "CANCELLED";
 
     @TableId(type = IdType.AUTO)
     private Long id;
@@ -26,6 +27,7 @@ public class BotReminder {
     /** 群号，私聊为 0 */
     private Long groupId;
 
+    /** 预设提示词：到点后交给主 AI 执行，不是直接发送的文本 */
     private String content;
 
     private LocalDateTime remindAt;

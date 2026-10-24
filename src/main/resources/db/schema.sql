@@ -165,6 +165,37 @@ CREATE TABLE IF NOT EXISTS bot_context (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='主 AI 上下文消息';
 
+-- 好友申请：接收 OneBot request/friend 事件后落库，管理台据此同意/拒绝
+CREATE TABLE IF NOT EXISTS bot_friend_request (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT       NOT NULL COMMENT '申请人 QQ 号',
+    flag       VARCHAR(512) NOT NULL COMMENT 'OneBot 请求 flag',
+    comment    VARCHAR(500) DEFAULT NULL COMMENT '附加消息',
+    via        VARCHAR(64)  DEFAULT NULL COMMENT '申请来源',
+    source     VARCHAR(16)  NOT NULL DEFAULT 'EVENT' COMMENT 'EVENT=事件推送',
+    status     VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / APPROVED / REJECTED',
+    remark     VARCHAR(64)  DEFAULT NULL COMMENT '同意时设置的好友备注',
+    event_time DATETIME     DEFAULT NULL COMMENT '事件时间',
+    created_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    handled_at DATETIME     DEFAULT NULL COMMENT '处理时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_flag (flag),
+    KEY idx_status_id (status, id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='好友申请';
+
+-- 语音发送配置（单行，id=1）：管理端可改音色与开关，即时生效
+CREATE TABLE IF NOT EXISTS bot_voice_config (
+    id         BIGINT       NOT NULL COMMENT '固定为 1',
+    enabled    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '1=启用 sendVoice 0=关闭',
+    speaker    VARCHAR(128) NOT NULL COMMENT '豆包 TTS 音色 ID',
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='语音发送配置';
+
 -- 群白名单：只有登记且 enabled=1 的群才会接收和回复消息
 CREATE TABLE IF NOT EXISTS bot_group (
     id         BIGINT       NOT NULL AUTO_INCREMENT,

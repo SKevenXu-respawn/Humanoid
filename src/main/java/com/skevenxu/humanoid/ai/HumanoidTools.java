@@ -13,6 +13,7 @@ import com.skevenxu.humanoid.ai.tools.SvgTool;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.TimeTool;
 import com.skevenxu.humanoid.ai.tools.ToolCatalogTool;
+import com.skevenxu.humanoid.ai.tools.VoiceTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.agent.tools.BraveWebSearchTool;
@@ -39,6 +40,7 @@ public class HumanoidTools {
     private final TimeTool timeTool;
     private final ReminderTool reminderTool;
     private final ChatMessageTool chatMessageTool;
+    private final VoiceTool voiceTool;
     private final SendFileTool sendFileTool;
     private final SendMessagesTool sendMessagesTool;
     private final ImageViewTool imageViewTool;
@@ -54,6 +56,7 @@ public class HumanoidTools {
     public HumanoidTools(TimeTool timeTool,
                          ReminderTool reminderTool,
                          ChatMessageTool chatMessageTool,
+                         VoiceTool voiceTool,
                          SendFileTool sendFileTool,
                          SendMessagesTool sendMessagesTool,
                          ImageViewTool imageViewTool,
@@ -68,6 +71,7 @@ public class HumanoidTools {
         this.timeTool = timeTool;
         this.reminderTool = reminderTool;
         this.chatMessageTool = chatMessageTool;
+        this.voiceTool = voiceTool;
         this.sendFileTool = sendFileTool;
         this.sendMessagesTool = sendMessagesTool;
         this.imageViewTool = imageViewTool;
@@ -106,6 +110,7 @@ public class HumanoidTools {
         tools.add(timeTool);
         tools.add(reminderTool);
         tools.add(chatMessageTool);
+        tools.add(voiceTool);
         tools.add(sendFileTool);
         tools.add(sendMessagesTool);
         tools.add(imageViewTool);
@@ -132,6 +137,20 @@ public class HumanoidTools {
         tools.add(sandboxFileTools);
         tools.addAll(webTools(summarizerClient));
         return withToolCatalog(tools);
+    }
+
+    /**
+     * 主动行为（proactive）使用的工具集：只保留时间、任务、技能、图片查看和网页抓取，
+     * 不提供 shell、文件写入、发消息等高风险工具；浏览器工具由调用方自行追加。
+     */
+    public List<Object> createForProactive(ChatClient summarizerClient) {
+        List<Object> tools = new ArrayList<>();
+        tools.add(timeTool);
+        tools.add(taskTool);
+        tools.add(skillsTool);
+        tools.add(imageViewTool);
+        tools.add(SmartWebFetchTool.builder(summarizerClient).build());
+        return tools;
     }
 
     /** 把当前工具清单做成 listTools 工具，模型可自查能力。 */

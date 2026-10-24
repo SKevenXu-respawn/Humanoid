@@ -8,10 +8,13 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.skevenxu.humanoid.ai.AiChatService;
 import com.skevenxu.humanoid.ai.ContextStore;
+import com.skevenxu.humanoid.ai.VoiceMessageService;
 import com.skevenxu.humanoid.entity.BotConversation;
+import com.skevenxu.humanoid.entity.BotFriendRequest;
 import com.skevenxu.humanoid.entity.BotGroup;
 import com.skevenxu.humanoid.entity.BotUser;
 import com.skevenxu.humanoid.mapper.BotConversationMapper;
+import com.skevenxu.humanoid.mapper.BotFriendRequestMapper;
 import com.skevenxu.humanoid.mapper.BotGroupMapper;
 import com.skevenxu.humanoid.mapper.BotUserMapper;
 import org.slf4j.Logger;
@@ -44,8 +47,10 @@ public class BotEventService {
     private final BotUserMapper botUserMapper;
     private final BotGroupMapper botGroupMapper;
     private final BotConversationMapper conversationMapper;
+    private final BotFriendRequestMapper friendRequestMapper;
     private final AiChatService aiChatService;
     private final LlbotApiClient llbotApiClient;
+    private final VoiceMessageService voiceMessageService;
     private final ContextStore contextStore;
     private final long rejectCooldownMillis;
     private final Map<Long, Long> lastRejectAt = new ConcurrentHashMap<>();
@@ -53,15 +58,19 @@ public class BotEventService {
     public BotEventService(BotUserMapper botUserMapper,
                            BotGroupMapper botGroupMapper,
                            BotConversationMapper conversationMapper,
+                           BotFriendRequestMapper friendRequestMapper,
                            AiChatService aiChatService,
                            LlbotApiClient llbotApiClient,
+                           VoiceMessageService voiceMessageService,
                            ContextStore contextStore,
                            @Value("${humanoid.whitelist.reject-cooldown-minutes:10}") long rejectCooldownMinutes) {
         this.botUserMapper = botUserMapper;
         this.botGroupMapper = botGroupMapper;
         this.conversationMapper = conversationMapper;
+        this.friendRequestMapper = friendRequestMapper;
         this.aiChatService = aiChatService;
         this.llbotApiClient = llbotApiClient;
+        this.voiceMessageService = voiceMessageService;
         this.contextStore = contextStore;
         this.rejectCooldownMillis = TimeUnit.MINUTES.toMillis(Math.max(0, rejectCooldownMinutes));
     }
@@ -71,6 +80,11 @@ public class BotEventService {
         BotEvent event = BotEvent.of(payload);
         JsonObject obj = payload.getAsJsonObject();
         String postType = str(obj, "post_type", "");
+
+        if ("request".equals(postType) && "friend".equals(str(obj, "request_type", ""))) {
+            recordFriendRequest(obj);
+            return event;
+        }
 
         if (!"message".equals(postType)) {
             log.debug("忽略非消息事件 {} seq={}", postType, event.seq());
@@ -105,6 +119,7 @@ public class BotEventService {
         }
 
         JsonElement message = obj.get("message");
+        JsonObject record = findRecord(message);
         Long replyId = findReplyId(message);
         String quoted = replyId == null ? null : llbotApiClient.getMessageText(replyId).orElse(null);
         if (replyId != null && quoted == null) {
@@ -112,6 +127,18 @@ public class BotEventService {
         }
 
         BotConversation conversation = toConversation(obj, userId, nickname, quoted);
+        if (record != null) {
+            // 语音先落库占位，转写与 AI 回复在后台完成，避免阻塞 LLBot webhook
+            conversation.setContent("[语音消息]（识别中）");
+            conversationMapper.insert(conversation);
+            refreshNickname(userId, nickname);
+            log.info("[{}] user={} 收到语音消息 conversation_id={}",
+                    conversation.getMessageType(), userId, conversation.getId());
+            voiceMessageService.handleAsync(conversation, str(record, "file", null),
+                    longVal(obj, "message_id", null));
+            return event;
+        }
+
         conversationMapper.insert(conversation);
         contextStore.appendUser(userId, conversation.getMessageType(), conversation.getGroupId(),
                 conversation.getContent(), imageRefs(message));
@@ -133,6 +160,36 @@ public class BotEventService {
         return botGroupMapper.selectCount(new LambdaQueryWrapper<BotGroup>()
                 .eq(BotGroup::getGroupId, groupId)
                 .eq(BotGroup::getEnabled, true)) > 0;
+    }
+
+    /** 好友申请事件落库，供管理台同意/拒绝。 */
+    private void recordFriendRequest(JsonObject obj) {
+        Long userId = longVal(obj, "user_id", null);
+        String flag = str(obj, "flag", null);
+        if (userId == null || flag == null || flag.isBlank()) {
+            log.warn("好友申请事件缺少 user_id 或 flag: {}", obj);
+            return;
+        }
+        if (friendRequestMapper.selectCount(new LambdaQueryWrapper<BotFriendRequest>()
+                .eq(BotFriendRequest::getFlag, flag)) > 0) {
+            log.debug("好友申请已存在 flag={} user_id={}", flag, userId);
+            return;
+        }
+
+        BotFriendRequest request = new BotFriendRequest();
+        request.setUserId(userId);
+        request.setFlag(flag);
+        request.setComment(str(obj, "comment", null));
+        request.setVia(str(obj, "via", null));
+        request.setSource(BotFriendRequest.SOURCE_EVENT);
+        request.setStatus(BotFriendRequest.STATUS_PENDING);
+        Long time = longVal(obj, "time", null);
+        if (time != null) {
+            request.setEventTime(LocalDateTime.ofInstant(Instant.ofEpochSecond(time), ZONE));
+        }
+        request.setCreatedAt(LocalDateTime.now(ZONE));
+        friendRequestMapper.insert(request);
+        log.info("收到好友申请 user_id={} comment={}", userId, request.getComment());
     }
 
     /** 私聊非白名单用户：发送提示，按冷却时间避免刷屏。 */
@@ -220,6 +277,27 @@ public class BotEventService {
         for (String value : values) {
             if (value != null && !value.isBlank()) {
                 return value;
+            }
+        }
+        return null;
+    }
+
+    /** 找出消息里的语音段，返回其 data 对象。 */
+    private static JsonObject findRecord(JsonElement message) {
+        if (message == null || !message.isJsonArray()) {
+            return null;
+        }
+        for (JsonElement element : message.getAsJsonArray()) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject segment = element.getAsJsonObject();
+            if (!"record".equals(str(segment, "type", ""))) {
+                continue;
+            }
+            JsonElement data = segment.get("data");
+            if (data != null && data.isJsonObject()) {
+                return data.getAsJsonObject();
             }
         }
         return null;

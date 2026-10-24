@@ -47,6 +47,7 @@ public class TaskExecutionService {
     private final BotConversationMapper conversationMapper;
     private final ContextStore contextStore;
     private final ToolCallLogger toolCallLogger;
+    private final ToolProgressNotifier toolProgressNotifier;
     private final String executorPrompt;
     private final boolean enabled;
     private final int maxAttempts;
@@ -60,6 +61,7 @@ public class TaskExecutionService {
                                 BotConversationMapper conversationMapper,
                                 ContextStore contextStore,
                                 ToolCallLogger toolCallLogger,
+                                ToolProgressNotifier toolProgressNotifier,
                                 @Value("classpath:prompts/task-executor-prompt.txt") Resource executorPrompt,
                                 @Value("${humanoid.task.executor.enabled:true}") boolean enabled,
                                 @Value("${humanoid.task.executor.max-attempts:3}") int maxAttempts) {
@@ -74,6 +76,7 @@ public class TaskExecutionService {
         this.humanoidTools = humanoidTools;
         this.stepMapper = stepMapper;
         this.toolCallLogger = toolCallLogger;
+        this.toolProgressNotifier = toolProgressNotifier;
         this.llbotApiClient = llbotApiClient;
         this.conversationMapper = conversationMapper;
         this.contextStore = contextStore;
@@ -132,7 +135,9 @@ public class TaskExecutionService {
         ToolContext.set(new ToolContext.ChatScope(
                 task.getUserId(),
                 task.getMessageType(),
-                task.getGroupId() != null && task.getGroupId() != 0 ? task.getGroupId() : null));
+                task.getGroupId() != null && task.getGroupId() != 0 ? task.getGroupId() : null,
+                true));
+        toolProgressNotifier.begin();
         try {
             chatClient.prompt()
                     .system(executorPrompt)
@@ -140,6 +145,7 @@ public class TaskExecutionService {
                     .call()
                     .content();
         } finally {
+            toolProgressNotifier.end();
             ToolContext.clear();
         }
 

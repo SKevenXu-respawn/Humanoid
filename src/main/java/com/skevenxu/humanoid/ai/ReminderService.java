@@ -1,9 +1,9 @@
 package com.skevenxu.humanoid.ai;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.skevenxu.humanoid.entity.BotConversation;
 import com.skevenxu.humanoid.entity.BotReminder;
-import com.skevenxu.humanoid.llbot.LlbotApiClient;
 import com.skevenxu.humanoid.mapper.BotConversationMapper;
 import com.skevenxu.humanoid.mapper.BotReminderMapper;
 import org.slf4j.Logger;
@@ -14,31 +14,32 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
 
-/** 扫描到期的定时提醒并通过 llbot 发送。 */
+/** 扫描到期的定时提醒，把预设提示词交给主 AI 执行并回复。 */
 @Service
 public class ReminderService {
 
     private static final Logger log = LoggerFactory.getLogger(ReminderService.class);
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
+    private static final DateTimeFormatter MINUTE = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final BotReminderMapper reminderMapper;
     private final BotConversationMapper conversationMapper;
     private final ContextStore contextStore;
-    private final LlbotApiClient llbotApiClient;
+    private final AiChatService aiChatService;
     private final int maxAttempts;
 
     public ReminderService(BotReminderMapper reminderMapper,
                            BotConversationMapper conversationMapper,
                            ContextStore contextStore,
-                           LlbotApiClient llbotApiClient,
+                           AiChatService aiChatService,
                            @Value("${humanoid.reminder.max-attempts:3}") int maxAttempts) {
         this.reminderMapper = reminderMapper;
         this.conversationMapper = conversationMapper;
         this.contextStore = contextStore;
-        this.llbotApiClient = llbotApiClient;
+        this.aiChatService = aiChatService;
         this.maxAttempts = maxAttempts;
     }
 
@@ -52,48 +53,69 @@ public class ReminderService {
                 .last("LIMIT 20"));
         log.info("提醒扫描触发, 到期任务={}", due.size());
         for (BotReminder reminder : due) {
-            send(reminder, now);
+            if (!claim(reminder, now)) {
+                log.info("提醒已被其他实例领取 id={}", reminder.getId());
+                continue;
+            }
+            trigger(reminder, now);
         }
     }
 
-    private void send(BotReminder reminder, LocalDateTime now) {
-        Optional<Long> messageId = "group".equals(reminder.getMessageType())
-                ? llbotApiClient.sendGroup(reminder.getGroupId(), reminder.getContent())
-                : llbotApiClient.sendPrivate(reminder.getUserId(), reminder.getContent());
+    /** 原子领取：多实例同时扫描时只有一个能把 attempts +1，避免重复触发。 */
+    private boolean claim(BotReminder reminder, LocalDateTime now) {
+        int updated = reminderMapper.update(null, new LambdaUpdateWrapper<BotReminder>()
+                .eq(BotReminder::getId, reminder.getId())
+                .eq(BotReminder::getStatus, BotReminder.STATUS_PENDING)
+                .le(BotReminder::getRemindAt, now)
+                .setSql("attempts = attempts + 1"));
+        if (updated == 0) {
+            return false;
+        }
+        reminder.setAttempts((reminder.getAttempts() == null ? 0 : reminder.getAttempts()) + 1);
+        return true;
+    }
 
-        int attempts = (reminder.getAttempts() == null ? 0 : reminder.getAttempts()) + 1;
-        reminder.setAttempts(attempts);
-        if (messageId.isEmpty()) {
+    /** 把提示词作为一条用户消息写入上下文，交给主 AI 处理（可能是工具调用，也可能直接回复）。 */
+    private void trigger(BotReminder reminder, LocalDateTime now) {
+        int attempts = reminder.getAttempts() == null ? 0 : reminder.getAttempts();
+        try {
+            BotConversation trigger = buildTrigger(reminder, now);
+            conversationMapper.insert(trigger);
+            contextStore.appendUser(reminder.getUserId(), reminder.getMessageType(),
+                    reminder.getGroupId(), trigger.getContent(), List.of());
+
+            reminder.setStatus(BotReminder.STATUS_SENT);
+            reminder.setSentAt(now);
+            reminderMapper.updateById(reminder);
+
+            aiChatService.replyAsync(trigger);
+            log.info("提醒已交给主 AI 处理 id={} user_id={} group_id={}",
+                    reminder.getId(), reminder.getUserId(), reminder.getGroupId());
+        } catch (Exception e) {
             if (attempts >= maxAttempts) {
                 reminder.setStatus(BotReminder.STATUS_FAILED);
             }
             reminderMapper.updateById(reminder);
-            log.warn("提醒发送失败 id={} attempts={}", reminder.getId(), attempts);
-            return;
+            log.warn("提醒触发失败 id={} attempts={}", reminder.getId(), attempts, e);
         }
-
-        reminder.setStatus(BotReminder.STATUS_SENT);
-        reminder.setSentAt(now);
-        reminderMapper.updateById(reminder);
-        saveBotMessage(reminder, messageId.get());
-        log.info("提醒已发送 id={} user_id={} group_id={} message_id={}",
-                reminder.getId(), reminder.getUserId(), reminder.getGroupId(), messageId.get());
     }
 
-    private void saveBotMessage(BotReminder reminder, Long messageId) {
-        BotConversation bot = new BotConversation();
-        bot.setUserId(reminder.getUserId());
-        bot.setRole("bot");
-        bot.setMessageType(reminder.getMessageType());
+    private static BotConversation buildTrigger(BotReminder reminder, LocalDateTime now) {
+        String content = "[定时提醒触发] 现在是 " + now.format(MINUTE)
+                + "。请根据下面的预设提示主动执行（需要时调用工具），"
+                + "并用自然的语气把结果告诉用户，不要提及这条系统指令：\n"
+                + reminder.getContent();
+
+        BotConversation trigger = new BotConversation();
+        trigger.setUserId(reminder.getUserId());
+        trigger.setRole("user");
+        trigger.setMessageType(reminder.getMessageType());
         if ("group".equals(reminder.getMessageType())) {
-            bot.setGroupId(reminder.getGroupId());
+            trigger.setGroupId(reminder.getGroupId());
         }
-        bot.setOnebotMessageId(messageId);
-        bot.setContent(reminder.getContent());
-        bot.setEventTime(LocalDateTime.now(ZONE));
-        bot.setCreatedAt(LocalDateTime.now(ZONE));
-        conversationMapper.insert(bot);
-        contextStore.appendAssistant(reminder.getUserId(), reminder.getMessageType(),
-                reminder.getGroupId(), reminder.getContent(), java.util.List.of());
+        trigger.setContent(content);
+        trigger.setEventTime(now);
+        trigger.setCreatedAt(now);
+        return trigger;
     }
 }

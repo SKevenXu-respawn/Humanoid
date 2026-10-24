@@ -3,6 +3,10 @@ HELP.md
 llbot_config/
 bot_files/
 llonebot/
+playwright_output/
+frontend/node_modules/
+frontend/dist/
+src/main/resources/static/admin/
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/

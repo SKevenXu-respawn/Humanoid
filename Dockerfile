@@ -1,4 +1,14 @@
 # ==============================
+# 阶段零：前端构建 (Vue)
+# ==============================
+FROM node:22-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY frontend ./
+RUN npm run build
+
+# ==============================
 # 阶段一：构建阶段 (Builder)
 # ==============================
 # 使用带有 Maven 和 JDK 17 的镜像
@@ -14,6 +24,9 @@ RUN mvn dependency:go-offline -B
 
 # 复制源代码
 COPY src ./src
+
+# 前端构建产物放入 Spring Boot 静态资源目录
+COPY --from=frontend /frontend/dist ./src/main/resources/static/admin
 
 # 执行 Maven 打包，强烈建议加上 -DskipTests，因为在 Docker 构建时连不上数据库，测试必挂
 RUN mvn clean package -DskipTests
