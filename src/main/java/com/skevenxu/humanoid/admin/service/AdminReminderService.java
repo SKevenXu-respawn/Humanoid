@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.PageResponse;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.ReminderCreateRequest;
 import com.skevenxu.humanoid.admin.support.AdminSupport;
+import com.skevenxu.humanoid.ai.ReminderService;
 import com.skevenxu.humanoid.entity.BotReminder;
 import com.skevenxu.humanoid.mapper.BotReminderMapper;
 import org.springframework.stereotype.Service;
@@ -21,9 +22,11 @@ public class AdminReminderService {
     private static final ZoneId ZONE = ZoneId.of("Asia/Shanghai");
 
     private final BotReminderMapper reminderMapper;
+    private final ReminderService reminderService;
 
-    public AdminReminderService(BotReminderMapper reminderMapper) {
+    public AdminReminderService(BotReminderMapper reminderMapper, ReminderService reminderService) {
         this.reminderMapper = reminderMapper;
+        this.reminderService = reminderService;
     }
 
     public PageResponse<BotReminder> page(Integer page, Integer size, String status, Long userId,
@@ -98,6 +101,13 @@ public class AdminReminderService {
         reminder.setSentAt(null);
         reminderMapper.updateById(reminder);
         return reminder;
+    }
+
+    /** 立即触发：不限状态，重置后马上交给主 AI。 */
+    public BotReminder trigger(Long id) {
+        get(id);
+        reminderService.triggerNow(id);
+        return get(id);
     }
 
     private BotReminder get(Long id) {

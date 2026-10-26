@@ -31,6 +31,9 @@ public final class AdminDtos {
                                      LocalDateTime createdAt) {
     }
 
+    public record ContextMessageUpdateRequest(String content) {
+    }
+
     public record SummaryView(Long id, String summary, Long lastConversationId,
                               LocalDateTime updatedAt) {
     }

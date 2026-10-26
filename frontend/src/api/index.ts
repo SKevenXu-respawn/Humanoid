@@ -23,6 +23,9 @@ export const api = {
     http.get('/contexts/messages', { params }).then((r) => r.data),
   clearContext: (params: Record<string, unknown>) =>
     http.delete('/contexts', { params }).then((r) => r.data),
+  updateContextMessage: (id: number, content: string) =>
+    http.put(`/contexts/messages/${id}`, { content }).then((r) => r.data),
+  deleteContextMessage: (id: number) => http.delete(`/contexts/messages/${id}`),
   getSummary: (params: Record<string, unknown>) =>
     http.get('/contexts/summary', { params }).then((r) => r.data),
   saveSummary: (body: unknown) => http.put('/contexts/summary', body).then((r) => r.data),
@@ -44,6 +47,7 @@ export const api = {
   createReminder: (body: unknown) => http.post('/reminders', body).then((r) => r.data),
   cancelReminder: (id: number) => http.post(`/reminders/${id}/cancel`).then((r) => r.data),
   retryReminder: (id: number) => http.post(`/reminders/${id}/retry`).then((r) => r.data),
+  triggerReminder: (id: number) => http.post(`/reminders/${id}/trigger`).then((r) => r.data),
 
   friends: (keyword?: string) =>
     http.get('/friends', { params: { keyword } }).then((r) => r.data),
@@ -60,7 +64,14 @@ export const api = {
     http.post('/friends/doubt-requests/approve', { flag }).then((r) => r.data),
 
   voiceConfig: () => http.get('/voice').then((r) => r.data),
-  saveVoiceConfig: (body: unknown) => http.put('/voice', body).then((r) => r.data)
+  saveVoiceConfig: (body: unknown) => http.put('/voice', body).then((r) => r.data),
+
+  videoQueue: (params: Record<string, unknown>) =>
+    http.get('/video-queue', { params }).then((r) => r.data),
+  sendVideoQueue: (id: number) => http.post(`/video-queue/${id}/send`).then((r) => r.data),
+  skipVideoQueue: (id: number) => http.post(`/video-queue/${id}/skip`).then((r) => r.data),
+  requeueVideoQueue: (id: number) => http.post(`/video-queue/${id}/requeue`).then((r) => r.data),
+  deleteVideoQueue: (id: number) => http.delete(`/video-queue/${id}`)
 }
 
 export const imageUrl = (id: number) => `/api/admin/images/${id}`

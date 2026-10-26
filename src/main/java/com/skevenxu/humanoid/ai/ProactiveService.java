@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -62,6 +63,7 @@ public class ProactiveService {
 
     private final boolean enabled;
     private final int checkIntervalMinutes;
+    private final int maxBrowseSessionsPerTick;
     private final Set<Long> userIds;
     private final String proactivePrompt;
     private final ChatClient chatClient;
@@ -76,6 +78,7 @@ public class ProactiveService {
 
     public ProactiveService(@Value("${humanoid.proactive.enabled:true}") boolean enabled,
                             @Value("${humanoid.proactive.check-interval-minutes:25}") int checkIntervalMinutes,
+                            @Value("${humanoid.proactive.max-browse-sessions-per-tick:2}") int maxBrowseSessionsPerTick,
                             @Value("${humanoid.proactive.user-ids:}") String userIds,
                             @Value("classpath:prompts/proactive-prompt.txt") Resource proactivePrompt,
                             ChatClient.Builder chatClientBuilder,
@@ -92,6 +95,7 @@ public class ProactiveService {
                             ContextStore contextStore) {
         this.enabled = enabled;
         this.checkIntervalMinutes = Math.max(1, checkIntervalMinutes);
+        this.maxBrowseSessionsPerTick = Math.max(0, Math.min(5, maxBrowseSessionsPerTick));
         this.userIds = userIds.isBlank() ? Set.of() : Arrays.stream(userIds.split(","))
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
@@ -136,22 +140,26 @@ public class ProactiveService {
         if (!enabled) {
             return;
         }
-        List<BotUser> users = userMapper.selectList(new LambdaQueryWrapper<BotUser>()
-                .eq(BotUser::getEnabled, true));
-        log.info("主动行为扫描触发, 白名单用户数={}", users.size());
-        boolean browsingUsed = false;
+        List<BotUser> users = new ArrayList<>(userMapper.selectList(new LambdaQueryWrapper<BotUser>()
+                .eq(BotUser::getEnabled, true)));
+        // 打乱顺序，让刷视频机会在多个用户之间轮换
+        Collections.shuffle(users);
+        log.info("主动行为扫描触发, 白名单用户数={} 本轮刷视频上限={}",
+                users.size(), maxBrowseSessionsPerTick);
+        int browseSessions = 0;
         for (BotUser user : users) {
             if (!userIds.isEmpty() && !userIds.contains(user.getUserId())) {
                 continue;
             }
             try {
-                if (check(user, !browsingUsed)) {
-                    browsingUsed = true;
+                if (check(user, browseSessions < maxBrowseSessionsPerTick)) {
+                    browseSessions++;
                 }
             } catch (Exception e) {
                 log.error("主动行为执行失败 user_id={}", user.getUserId(), e);
             }
         }
+        log.info("主动行为扫描结束, 本轮实际刷视频用户数={}", browseSessions);
     }
 
     /** @return 本轮是否执行了浏览器操作 */

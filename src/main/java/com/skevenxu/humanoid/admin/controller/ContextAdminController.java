@@ -1,5 +1,6 @@
 package com.skevenxu.humanoid.admin.controller;
 
+import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextMessageUpdateRequest;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextMessageView;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextScopeView;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.PageResponse;
@@ -59,6 +60,18 @@ public class ContextAdminController {
             throw new IllegalArgumentException("userId 不能为空");
         }
         return Map.of("deleted", contextService.clearContext(userId, messageType, groupId));
+    }
+
+    @PutMapping("/contexts/messages/{id}")
+    public ContextMessageView updateMessage(@PathVariable Long id,
+                                            @RequestBody ContextMessageUpdateRequest request) {
+        return contextService.updateMessage(id, request);
+    }
+
+    @DeleteMapping("/contexts/messages/{id}")
+    public ResponseEntity<Void> deleteMessage(@PathVariable Long id) {
+        contextService.deleteMessage(id);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/contexts/summary")

@@ -196,6 +196,28 @@ CREATE TABLE IF NOT EXISTS bot_voice_config (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='语音发送配置';
 
+-- 视频分享队列：主动刷到的视频先入队，按 id 先进先出发送；用户可查询未发送数量
+CREATE TABLE IF NOT EXISTS bot_video_queue (
+    id              BIGINT       NOT NULL AUTO_INCREMENT,
+    user_id         BIGINT       NOT NULL COMMENT '接收用户 QQ 号',
+    message_type    VARCHAR(16)  NOT NULL DEFAULT 'private' COMMENT 'private / group',
+    group_id        BIGINT       NOT NULL DEFAULT 0 COMMENT '群号，私聊为 0',
+    url             VARCHAR(1000) NOT NULL COMMENT '视频链接',
+    title           VARCHAR(500) DEFAULT NULL COMMENT '视频标题',
+    comment         VARCHAR(500) DEFAULT NULL COMMENT '推荐语',
+    source          VARCHAR(16)  NOT NULL DEFAULT 'PROACTIVE' COMMENT 'PROACTIVE / USER / ADMIN',
+    status          VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING / SENT / SKIPPED / FAILED',
+    attempts        INT          NOT NULL DEFAULT 0 COMMENT '发送尝试次数',
+    created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    sent_at         DATETIME     DEFAULT NULL,
+    sent_message_id BIGINT       DEFAULT NULL COMMENT 'OneBot message_id',
+    PRIMARY KEY (id),
+    KEY idx_status_id (status, id),
+    KEY idx_user_status (user_id, status, id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='视频分享队列';
+
 -- 群白名单：只有登记且 enabled=1 的群才会接收和回复消息
 CREATE TABLE IF NOT EXISTS bot_group (
     id         BIGINT       NOT NULL AUTO_INCREMENT,

@@ -50,4 +50,9 @@ public class ReminderAdminController {
     public BotReminder retry(@PathVariable Long id) {
         return reminderService.retry(id);
     }
+
+    @PostMapping("/{id}/trigger")
+    public BotReminder trigger(@PathVariable Long id) {
+        return reminderService.trigger(id);
+    }
 }

@@ -15,6 +15,10 @@ const total = ref(0)
 const page = ref(1)
 const size = ref(20)
 
+const editDialog = ref(false)
+const editingId = ref<number | null>(null)
+const editContent = ref('')
+
 function scopeParams() {
   return {
     userId: selected.value.userId,
@@ -74,6 +78,30 @@ async function clearContext() {
   )
   const result = await api.clearContext(scopeParams())
   ElMessage.success(`已清空 ${result.deleted} 条`)
+  await loadMessages()
+  await loadScopes()
+}
+
+function openEdit(message: any) {
+  editingId.value = message.id
+  editContent.value = message.content || ''
+  editDialog.value = true
+}
+
+async function saveEdit() {
+  if (editingId.value == null) {
+    return
+  }
+  await api.updateContextMessage(editingId.value, editContent.value)
+  ElMessage.success('已保存')
+  editDialog.value = false
+  await loadMessages()
+}
+
+async function removeMessage(message: any) {
+  await ElMessageBox.confirm('删除这条上下文消息？', '提示', { type: 'warning' })
+  await api.deleteContextMessage(message.id)
+  ElMessage.success('已删除')
   await loadMessages()
   await loadScopes()
 }
@@ -157,6 +185,10 @@ onMounted(loadScopes)
               {{ message.role === 'assistant' ? '助手' : '用户' }}
             </el-tag>
             <span>{{ message.createdAt }}</span>
+            <span style="margin-left: auto">
+              <el-button link type="primary" size="small" @click="openEdit(message)">编辑</el-button>
+              <el-button link type="danger" size="small" @click="removeMessage(message)">删除</el-button>
+            </span>
           </div>
           <div class="msg-content">{{ message.content || '[图片]' }}</div>
           <div v-if="message.imageIds.length" class="msg-images">
@@ -186,4 +218,17 @@ onMounted(loadScopes)
       </el-card>
     </el-col>
   </el-row>
+
+  <el-dialog v-model="editDialog" title="编辑上下文消息" width="640px">
+    <el-input
+      v-model="editContent"
+      type="textarea"
+      :rows="8"
+      placeholder="留空表示没有文本（图片引用仍保留）"
+    />
+    <template #footer>
+      <el-button @click="editDialog = false">取消</el-button>
+      <el-button type="primary" @click="saveEdit">保存</el-button>
+    </template>
+  </el-dialog>
 </template>

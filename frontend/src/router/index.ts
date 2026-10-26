@@ -8,6 +8,7 @@ import TasksView from '../views/TasksView.vue'
 import RemindersView from '../views/RemindersView.vue'
 import FriendsView from '../views/FriendsView.vue'
 import VoiceView from '../views/VoiceView.vue'
+import VideoQueueView from '../views/VideoQueueView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -20,7 +21,8 @@ const router = createRouter({
     { path: '/tasks', component: TasksView, meta: { title: '任务' } },
     { path: '/reminders', component: RemindersView, meta: { title: '提醒' } },
     { path: '/friends', component: FriendsView, meta: { title: '好友管理' } },
-    { path: '/voice', component: VoiceView, meta: { title: '语音设置' } }
+    { path: '/voice', component: VoiceView, meta: { title: '语音设置' } },
+    { path: '/video-queue', component: VideoQueueView, meta: { title: '视频队列' } }
   ]
 })
 

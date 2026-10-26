@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
+import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextMessageUpdateRequest;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextMessageView;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.ContextScopeView;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.PageResponse;
@@ -97,24 +98,52 @@ public class AdminContextService {
                 .orderByDesc(BotContext::getId);
         Page<BotContext> result = contextMapper.selectPage(new Page<>(page, size), query);
         List<ContextMessageView> views = result.getRecords().stream()
-                .map(row -> {
-                    List<String> refs = imageRefs(row.getImageRefs());
-                    List<Long> ids = refs.stream()
-                            .filter(ref -> ref.startsWith(IMAGE_PREFIX))
-                            .map(ref -> {
-                                try {
-                                    return Long.parseLong(ref.substring(IMAGE_PREFIX.length()));
-                                } catch (NumberFormatException e) {
-                                    return null;
-                                }
-                            })
-                            .filter(java.util.Objects::nonNull)
-                            .toList();
-                    return new ContextMessageView(row.getId(), row.getRole(), row.getContent(),
-                            refs, ids, row.getCreatedAt());
-                })
+                .map(AdminContextService::toMessageView)
                 .toList();
         return new PageResponse<>(views, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
+    /** 修改单条上下文消息的文本；图片引用和角色保持不变。 */
+    public ContextMessageView updateMessage(Long id, ContextMessageUpdateRequest request) {
+        BotContext row = contextMapper.selectById(id);
+        if (row == null) {
+            throw new NoSuchElementException("上下文消息不存在: " + id);
+        }
+        if (request == null || request.content() == null) {
+            throw new IllegalArgumentException("content 不能为空");
+        }
+        String text = request.content().trim();
+        if (text.length() > 20000) {
+            throw new IllegalArgumentException("内容过长");
+        }
+        row.setContent(text);
+        contextMapper.updateById(row);
+        return toMessageView(row);
+    }
+
+    public void deleteMessage(Long id) {
+        BotContext row = contextMapper.selectById(id);
+        if (row == null) {
+            throw new NoSuchElementException("上下文消息不存在: " + id);
+        }
+        contextMapper.deleteById(id);
+    }
+
+    private static ContextMessageView toMessageView(BotContext row) {
+        List<String> refs = imageRefs(row.getImageRefs());
+        List<Long> ids = refs.stream()
+                .filter(ref -> ref.startsWith(IMAGE_PREFIX))
+                .map(ref -> {
+                    try {
+                        return Long.parseLong(ref.substring(IMAGE_PREFIX.length()));
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return new ContextMessageView(row.getId(), row.getRole(), row.getContent(),
+                refs, ids, row.getCreatedAt());
     }
 
     public int clearContext(Long userId, String messageType, Long groupId) {

@@ -90,6 +90,17 @@ async function retry(row: any) {
   load()
 }
 
+async function triggerNow(row: any) {
+  await ElMessageBox.confirm(
+    '立即触发这条提醒？会马上交给主 AI 处理，不等提醒时间。',
+    '立即触发',
+    { type: 'warning' }
+  )
+  await api.triggerReminder(row.id)
+  ElMessage.success('已手动触发')
+  load()
+}
+
 onMounted(load)
 </script>
 
@@ -122,8 +133,9 @@ onMounted(load)
         </template>
       </el-table-column>
       <el-table-column prop="attempts" label="尝试" width="70" />
-      <el-table-column label="操作" width="140">
+      <el-table-column label="操作" width="200">
         <template #default="{ row }">
+          <el-button link type="success" @click="triggerNow(row)">立即触发</el-button>
           <el-button v-if="row.status === 'PENDING'" link type="danger" @click="cancel(row)">
             取消
           </el-button>

@@ -2,6 +2,7 @@ package com.skevenxu.humanoid.ai;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.skevenxu.humanoid.entity.BotConversation;
 import com.skevenxu.humanoid.entity.BotReminder;
 import com.skevenxu.humanoid.mapper.BotConversationMapper;
@@ -61,17 +62,47 @@ public class ReminderService {
         }
     }
 
+    /** 管理端手动触发：重置为待触发并立即交给主 AI（不等待下一次扫描）。 */
+    public void triggerNow(Long id) {
+        BotReminder reminder = reminderMapper.selectById(id);
+        if (reminder == null) {
+            throw new java.util.NoSuchElementException("提醒不存在: " + id);
+        }
+        LocalDateTime now = LocalDateTime.now(ZONE);
+        // 去掉毫秒，避免 MySQL DATETIME 四舍五入后比 now 还大导致领取失败
+        LocalDateTime due = now.withNano(0);
+        // 字符串列名避免在纯单元测试中触发 MyBatis-Plus lambda 缓存初始化
+        reminderMapper.update(null, new UpdateWrapper<BotReminder>()
+                .eq("id", id)
+                .set("status", BotReminder.STATUS_PENDING)
+                .set("remind_at", due)
+                .set("attempts", 0)
+                .set("sent_at", null));
+        reminder.setStatus(BotReminder.STATUS_PENDING);
+        reminder.setRemindAt(due);
+        reminder.setAttempts(0);
+        reminder.setSentAt(null);
+
+        if (claim(reminder, now)) {
+            trigger(reminder, now);
+        } else {
+            log.info("手动触发时提醒已被其他实例领取 id={}", id);
+        }
+    }
+
     /** 原子领取：多实例同时扫描时只有一个能把 attempts +1，避免重复触发。 */
     private boolean claim(BotReminder reminder, LocalDateTime now) {
+        int attempts = reminder.getAttempts() == null ? 0 : reminder.getAttempts();
         int updated = reminderMapper.update(null, new LambdaUpdateWrapper<BotReminder>()
                 .eq(BotReminder::getId, reminder.getId())
                 .eq(BotReminder::getStatus, BotReminder.STATUS_PENDING)
+                .eq(BotReminder::getAttempts, attempts)
                 .le(BotReminder::getRemindAt, now)
                 .setSql("attempts = attempts + 1"));
         if (updated == 0) {
             return false;
         }
-        reminder.setAttempts((reminder.getAttempts() == null ? 0 : reminder.getAttempts()) + 1);
+        reminder.setAttempts(attempts + 1);
         return true;
     }
 

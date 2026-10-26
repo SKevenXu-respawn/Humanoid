@@ -8,12 +8,14 @@ import com.skevenxu.humanoid.ai.tools.ReminderTool;
 import com.skevenxu.humanoid.ai.tools.SandboxFileTools;
 import com.skevenxu.humanoid.ai.tools.SendFileTool;
 import com.skevenxu.humanoid.ai.tools.SendMessagesTool;
+import com.skevenxu.humanoid.ai.tools.ShareVideoTool;
 import com.skevenxu.humanoid.ai.tools.ShellTool;
 import com.skevenxu.humanoid.ai.tools.SvgTool;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.TimeTool;
 import com.skevenxu.humanoid.ai.tools.ToolCatalogTool;
 import com.skevenxu.humanoid.ai.tools.VoiceTool;
+import com.skevenxu.humanoid.ai.tools.VideoQueueTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springaicommunity.agent.tools.BraveWebSearchTool;
@@ -41,8 +43,10 @@ public class HumanoidTools {
     private final ReminderTool reminderTool;
     private final ChatMessageTool chatMessageTool;
     private final VoiceTool voiceTool;
+    private final VideoQueueTool videoQueueTool;
     private final SendFileTool sendFileTool;
     private final SendMessagesTool sendMessagesTool;
+    private final ShareVideoTool shareVideoTool;
     private final ImageViewTool imageViewTool;
     private final DownloadTool downloadTool;
     private final TaskTool taskTool;
@@ -57,8 +61,10 @@ public class HumanoidTools {
                          ReminderTool reminderTool,
                          ChatMessageTool chatMessageTool,
                          VoiceTool voiceTool,
+                         VideoQueueTool videoQueueTool,
                          SendFileTool sendFileTool,
                          SendMessagesTool sendMessagesTool,
+                         ShareVideoTool shareVideoTool,
                          ImageViewTool imageViewTool,
                          DownloadTool downloadTool,
                          TaskTool taskTool,
@@ -72,8 +78,10 @@ public class HumanoidTools {
         this.reminderTool = reminderTool;
         this.chatMessageTool = chatMessageTool;
         this.voiceTool = voiceTool;
+        this.videoQueueTool = videoQueueTool;
         this.sendFileTool = sendFileTool;
         this.sendMessagesTool = sendMessagesTool;
+        this.shareVideoTool = shareVideoTool;
         this.imageViewTool = imageViewTool;
         this.downloadTool = downloadTool;
         this.taskTool = taskTool;
@@ -111,6 +119,7 @@ public class HumanoidTools {
         tools.add(reminderTool);
         tools.add(chatMessageTool);
         tools.add(voiceTool);
+        tools.add(videoQueueTool);
         tools.add(sendFileTool);
         tools.add(sendMessagesTool);
         tools.add(imageViewTool);
@@ -149,6 +158,7 @@ public class HumanoidTools {
         tools.add(taskTool);
         tools.add(skillsTool);
         tools.add(imageViewTool);
+        tools.add(shareVideoTool);
         tools.add(SmartWebFetchTool.builder(summarizerClient).build());
         return tools;
     }

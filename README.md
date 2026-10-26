@@ -16,7 +16,8 @@
 | 浏览器 | Playwright MCP（无头 Chromium）：打开网页、点击、填表、截图、读取页面 |
 | 任务 | 多步骤任务，后台执行器逐步执行，失败可暂停/恢复 |
 | 提醒 | AI 设置定时提醒；到点把预设提示词交给主 AI 执行（可调工具）并回复 |
-| 主动行为 | 每 30 分钟自主决定：什么都不做 / 找用户聊天 / 刷视频并留评论 |
+| 主动行为 | 每 30 分钟自主决定：刷视频（优先）并加入分享队列 / 找用户聊天 / 跳过 |
+| 视频队列 | 主动刷到的视频先入队；严格模式先把最早用户的全部视频发完再轮到下一个用户；用户可查询还有多少没看 |
 | 好友管理 | 管理台查看好友、删除好友（删除前自动发送告知消息）、同意/拒绝好友申请、处理被过滤的好友申请（通过 LLBot 接口） |
 | 管理台 | 内网 Web 管理：白名单、上下文/总结、任务、提醒、好友、概览 |
 | 技能 | Markdown 技能库，AI 可创建并立即热加载 |
@@ -91,11 +92,12 @@ MySQL (:3306) + DeepSeek API
 一期功能：
 - 概览：白名单、对话、上下文、任务、提醒、图片、工具调用统计，LLBot 状态
 - 用户 / 群白名单：搜索、新增、编辑、启用开关、删除
-- 上下文与总结：按会话查看消息与图片、编辑/删除滚动总结、清空上下文
+- 上下文与总结：按会话查看消息与图片、编辑/删除单条上下文、编辑/删除滚动总结、清空上下文
 - 任务：新建、步骤管理、开始/暂停/恢复/完成/删除
-- 提醒：新建（填写到点后交给主 AI 的提示词）、取消、失败重试
+- 提醒：新建、立即手动触发、取消、失败重试
 - 好友管理：好友列表与删除、好友申请同意/拒绝、被过滤好友申请处理
 - 语音设置：开关 `sendVoice`、选择豆包 TTS 2.0 音色，保存后立即生效
+- 视频队列：查看/筛选队列、立即发送、跳过、重新入队、删除
 
 > 好友申请依赖 OneBot 的 `request/friend` 事件：应用收到事件后写入 `bot_friend_request`，管理台再通过 `set_friend_add_request` 处理。若非白名单私聊只收到提示、没有 AI 回复，好友申请仍会正常记录。
 
@@ -282,7 +284,8 @@ bot_files/
 | `spring.ai.mcp.client.streamable-http.connections.playwright.url` | `http://playwright:8931` | Playwright MCP 地址（仅容器内网） |
 | `humanoid.tools.mcp-output-dir` | `/app/mcp-output` | spring-app 中共享输出目录的挂载点 |
 | `humanoid.tools.playwright-output-dir` | `/app/output` | Playwright 容器内的输出目录 |
-| `humanoid.proactive.*` | cron `0 */30 * * * *` | 每 30 分钟自主行为；check-interval 冷却 25 分钟 |
+| `humanoid.proactive.*` | cron `0 */30 * * * *` | 每 30 分钟自主行为；check-interval 冷却 25 分钟；`max-browse-sessions-per-tick=2` 控制每轮最多几个用户刷视频 |
+| `humanoid.video-queue.*` | 见文件 | 视频队列：`mode=strict`（最早用户全部发完再换人）/ `fair`（每人每轮一条）、`cron`、`max-per-tick=5`、`enabled` |
 | `humanoid.reminder.*` | 见文件 | 提醒派发间隔与重试次数 |
 | `humanoid.task.executor.*` | 见文件 | 后台任务执行器 |
 
@@ -302,6 +305,7 @@ bot_files/
 | `bot_task` / `bot_task_step` | 任务与步骤 |
 | `bot_reminder` | 定时提醒（content 为交给主 AI 的预设提示词） |
 | `bot_voice_config` | 语音发送开关与音色（管理端修改，单行） |
+| `bot_video_queue` | 视频分享队列（PENDING/SENT/SKIPPED/FAILED） |
 | `bot_friend_request` | 好友申请（OneBot request/friend 事件） |
 | `bot_proactive_state` | 主动发言状态 |
 
@@ -332,6 +336,8 @@ bot_files/
 | `sendImage` / `sendFace` / `getFavoriteFaces` | 发送图片、表情、收藏表情 |
 | `sendFile` / `sendMessages` | 发送文件、连续多条消息 |
 | `sendVoice` | 文本合成为语音并发送（火山引擎豆包长文本 TTS） |
+| `shareVideo` | 主动刷视频时，把有趣的视频加入分享队列 |
+| `videoQueueStatus` / `nextVideo` | 查询未发送视频数量 / 立即发送当前队列的下一个视频 |
 | `renderSvg` | SVG/XML 渲染成 PNG 并发送 |
 | `describeImage` | 回看已发送图片内容 |
 | `addTask` / `addTaskStep` / `startTask` / `pauseTask` / `resumeTask` / `completeTask` / `completeStep` / `deleteTask` / `getTaskProgress` | 任务管理 |

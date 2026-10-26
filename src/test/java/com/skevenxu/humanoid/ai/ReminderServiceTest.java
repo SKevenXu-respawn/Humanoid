@@ -116,4 +116,33 @@ class ReminderServiceTest {
         verify(aiChatService, org.mockito.Mockito.never()).replyAsync(any(BotConversation.class));
         assertThat(reminder.getAttempts()).isZero();
     }
+
+    @Test
+    void manualTriggerDispatchesRegardlessOfPreviousStatus() {
+        BotReminderMapper reminderMapper = mock(BotReminderMapper.class);
+        BotConversationMapper conversationMapper = mock(BotConversationMapper.class);
+        ContextStore contextStore = mock(ContextStore.class);
+        AiChatService aiChatService = mock(AiChatService.class);
+        ReminderService service = new ReminderService(
+                reminderMapper, conversationMapper, contextStore, aiChatService, 3);
+
+        BotReminder reminder = new BotReminder();
+        reminder.setId(10L);
+        reminder.setUserId(10001L);
+        reminder.setMessageType("private");
+        reminder.setGroupId(0L);
+        reminder.setContent("手动触发测试");
+        reminder.setRemindAt(LocalDateTime.now().plusHours(2));
+        reminder.setStatus(BotReminder.STATUS_FAILED);
+        reminder.setAttempts(3);
+        when(reminderMapper.selectById(10L)).thenReturn(reminder);
+        when(reminderMapper.update(any(), any())).thenReturn(1);
+
+        service.triggerNow(10L);
+
+        assertThat(reminder.getStatus()).isEqualTo(BotReminder.STATUS_SENT);
+        assertThat(reminder.getAttempts()).isEqualTo(1);
+        verify(conversationMapper).insert(any(BotConversation.class));
+        verify(aiChatService).replyAsync(any(BotConversation.class));
+    }
 }
