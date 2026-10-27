@@ -50,11 +50,15 @@ public class AdminFriendService {
                 .toList();
     }
 
-    public void delete(Long userId) {
+    public void delete(Long userId, String notice) {
         if (userId == null || userId <= 0) {
             throw new IllegalArgumentException("userId 不合法");
         }
-        if (llbotApiClient.sendPrivate(userId, DELETE_FRIEND_NOTICE).isEmpty()) {
+        String text = StringUtils.hasText(notice) ? notice.trim() : DELETE_FRIEND_NOTICE;
+        if (text.length() > 500) {
+            throw new IllegalArgumentException("告知文本不能超过 500 字");
+        }
+        if (llbotApiClient.sendPrivate(userId, text).isEmpty()) {
             throw new IllegalStateException("删除前向好友发送通知失败，已取消删除，请确认 QQ 已登录且对方仍是好友");
         }
         if (!llbotApiClient.deleteFriend(userId)) {

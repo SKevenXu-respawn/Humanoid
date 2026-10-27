@@ -5,6 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
+import com.skevenxu.humanoid.ai.memory.MemoryService;
+import com.skevenxu.humanoid.ai.prompt.PromptService;
 import com.skevenxu.humanoid.ai.voice.VoiceConfigService;
 import com.skevenxu.humanoid.entity.BotContext;
 import com.skevenxu.humanoid.entity.BotConversation;
@@ -23,12 +25,9 @@ import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -50,6 +49,7 @@ public class AiChatService {
     private final ChatClient chatClient;
     private final HumanoidTools humanoidTools;
     private final TaskTool taskTool;
+    private final MemoryService memoryService;
     private final ToolCallLogger toolCallLogger;
     private final ToolProgressNotifier toolProgressNotifier;
     private final VoiceConfigService voiceConfigService;
@@ -60,7 +60,7 @@ public class AiChatService {
     private final ImageRefResolver imageRefResolver;
     private final LlbotApiClient llbotApiClient;
     private final SummaryService summaryService;
-    private final String systemPrompt;
+    private final PromptService promptService;
     private final int maxImages;
     private final int recentToolCalls;
     private final int contextMessages;
@@ -71,6 +71,7 @@ public class AiChatService {
                          ChatClient.Builder chatClientBuilder,
                          HumanoidTools humanoidTools,
                          TaskTool taskTool,
+                         MemoryService memoryService,
                          ToolCallLogger toolCallLogger,
                          ToolProgressNotifier toolProgressNotifier,
                          VoiceConfigService voiceConfigService,
@@ -81,7 +82,7 @@ public class AiChatService {
                          ImageRefResolver imageRefResolver,
                          LlbotApiClient llbotApiClient,
                          SummaryService summaryService,
-                         @Value("classpath:prompts/system-prompt.txt") Resource systemPrompt,
+                         PromptService promptService,
                          @Value("${humanoid.ai.max-images:4}") int maxImages,
                          @Value("${humanoid.ai.recent-tool-calls:8}") int recentToolCalls,
                          @Value("${humanoid.ai.context-messages:100}") int contextMessages,
@@ -89,6 +90,7 @@ public class AiChatService {
         this.deepSeekClient = deepSeekClient;
         this.humanoidTools = humanoidTools;
         this.taskTool = taskTool;
+        this.memoryService = memoryService;
         this.toolCallLogger = toolCallLogger;
         this.toolProgressNotifier = toolProgressNotifier;
         this.voiceConfigService = voiceConfigService;
@@ -100,7 +102,7 @@ public class AiChatService {
         this.chatClient = buildChatClient(chatClientBuilder);
         this.llbotApiClient = llbotApiClient;
         this.summaryService = summaryService;
-        this.systemPrompt = loadPrompt(systemPrompt);
+        this.promptService = promptService;
         this.maxImages = maxImages;
         this.recentToolCalls = recentToolCalls;
         this.contextMessages = contextMessages;
@@ -149,23 +151,17 @@ public class AiChatService {
                 .toList();
     }
 
-    /** .properties 默认按 ISO-8859-1 解析，中文提示词必须从 UTF-8 资源文件读取。 */
-    private static String loadPrompt(Resource resource) {
-        try {
-            return resource.getContentAsString(StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new IllegalStateException("无法读取 prompts/system-prompt.txt", e);
-        }
-    }
-
     /** 异步生成回复并发送，避免阻塞 llbot 的 webhook 请求。 */
     @Async
     public void replyAsync(BotConversation userMessage) {
         try {
+            String basePrompt = promptService.systemPrompt();
+            ToolContext.ChatScope memoryScope = new ToolContext.ChatScope(
+                    userMessage.getUserId(), userMessage.getMessageType(), userMessage.getGroupId());
             String summary = PromptSanitizer.clean(summaryService.getSummary(userMessage));
             String system = summary.isBlank()
-                    ? systemPrompt
-                    : systemPrompt + "\n\n以前的总结为：\n" + summary;
+                    ? basePrompt
+                    : basePrompt + "\n\n以前的总结为：\n" + summary;
             system += "\n\n文件目录根路径：" + PromptSanitizer.clean(
                     humanoidTools.userRoot(userMessage.getUserId()))
                     + "（共享目录：" + PromptSanitizer.clean(humanoidTools.sharedDirs())
@@ -179,6 +175,10 @@ public class AiChatService {
             String skills = PromptSanitizer.clean(humanoidTools.skillsBrief());
             if (!skills.isBlank()) {
                 system += "\n\n可用技能（需要时先用 useSkill 加载详细步骤）：\n" + skills;
+            }
+            String memoryBlock = memoryService.promptBlock(memoryScope);
+            if (!memoryBlock.isBlank()) {
+                system += memoryBlock;
             }
             system += recentToolCallsBrief(userMessage);
             if (log.isDebugEnabled()) {

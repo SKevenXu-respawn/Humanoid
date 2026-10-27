@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS bot_friend_request (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='好友申请';
 
+-- 提示词：数据库优先于 classpath 默认文件，管理端可编辑
+CREATE TABLE IF NOT EXISTS bot_prompt (
+    id         BIGINT       NOT NULL AUTO_INCREMENT,
+    prompt_key VARCHAR(64)  NOT NULL COMMENT 'system_prompt / summary_prompt / ...',
+    content    LONGTEXT     NOT NULL,
+    updated_at DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_prompt_key (prompt_key)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='提示词配置';
+
 -- 密钥配置：值优先于环境变量/配置文件，管理端只显示掩码
 CREATE TABLE IF NOT EXISTS bot_secret (
     id           BIGINT       NOT NULL AUTO_INCREMENT,
@@ -229,6 +241,56 @@ CREATE TABLE IF NOT EXISTS bot_video_queue (
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='视频分享队列';
+
+-- 长期记忆：PRIVATE=用户私有，GROUP=群公共，RELATIONSHIP=涉及多个用户的公共关系
+CREATE TABLE IF NOT EXISTS bot_memory (
+    id                     BIGINT       NOT NULL AUTO_INCREMENT,
+    memory_type            VARCHAR(20)  NOT NULL COMMENT 'PRIVATE / GROUP / RELATIONSHIP',
+    scope_type             VARCHAR(16)  NOT NULL COMMENT 'USER / GROUP / GLOBAL',
+    scope_id               BIGINT       NOT NULL DEFAULT 0 COMMENT '用户QQ / 群号 / 0=global',
+    owner_user_id          BIGINT       NOT NULL DEFAULT 0 COMMENT 'PRIVATE 的归属用户；公共记忆为 0',
+    content                TEXT         NOT NULL COMMENT '记忆内容',
+    content_hash           VARCHAR(64)  NOT NULL COMMENT '去重哈希',
+    importance             INT          NOT NULL DEFAULT 3 COMMENT '1-5',
+    source                 VARCHAR(20)  NOT NULL DEFAULT 'AI' COMMENT 'AI / USER / ADMIN',
+    source_conversation_id BIGINT       DEFAULT NULL,
+    status                 VARCHAR(16)  NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE / SUMMARIZED / DELETED',
+    created_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at             DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    last_used_at           DATETIME     DEFAULT NULL,
+    PRIMARY KEY (id),
+    KEY idx_private (owner_user_id, status, importance),
+    KEY idx_scope (scope_type, scope_id, status, importance),
+    KEY idx_hash (scope_type, scope_id, owner_user_id, content_hash)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='长期记忆';
+
+CREATE TABLE IF NOT EXISTS bot_memory_participant (
+    id        BIGINT NOT NULL AUTO_INCREMENT,
+    memory_id BIGINT NOT NULL,
+    user_id   BIGINT NOT NULL COMMENT '涉及的用户 QQ',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_memory_user (memory_id, user_id),
+    KEY idx_user (user_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='长期记忆参与人';
+
+-- 记忆总结：定期把旧记忆压缩成高密度画像
+CREATE TABLE IF NOT EXISTS bot_memory_summary (
+    id            BIGINT   NOT NULL AUTO_INCREMENT,
+    scope_type    VARCHAR(16) NOT NULL COMMENT 'USER / GROUP',
+    scope_id      BIGINT   NOT NULL DEFAULT 0,
+    owner_user_id BIGINT   NOT NULL DEFAULT 0,
+    summary       TEXT     NOT NULL,
+    memory_count  INT      NOT NULL DEFAULT 0,
+    updated_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_scope (scope_type, scope_id, owner_user_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='长期记忆总结';
 
 -- 群白名单：只有登记且 enabled=1 的群才会接收和回复消息
 CREATE TABLE IF NOT EXISTS bot_group (

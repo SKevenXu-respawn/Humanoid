@@ -5,6 +5,7 @@ import com.skevenxu.humanoid.ai.tools.BraveSearchTool;
 import com.skevenxu.humanoid.ai.tools.DownloadTool;
 import com.skevenxu.humanoid.ai.tools.HumanoidSkillsTool;
 import com.skevenxu.humanoid.ai.tools.ImageViewTool;
+import com.skevenxu.humanoid.ai.tools.MemoryTool;
 import com.skevenxu.humanoid.ai.tools.ReminderTool;
 import com.skevenxu.humanoid.ai.tools.SandboxFileTools;
 import com.skevenxu.humanoid.ai.tools.SendFileTool;
@@ -40,6 +41,7 @@ public class HumanoidTools {
     private static final Logger log = LoggerFactory.getLogger(HumanoidTools.class);
 
     private final TimeTool timeTool;
+    private final MemoryTool memoryTool;
     private final ReminderTool reminderTool;
     private final ChatMessageTool chatMessageTool;
     private final VoiceTool voiceTool;
@@ -58,6 +60,7 @@ public class HumanoidTools {
     private final FileSandbox sandbox;
 
     public HumanoidTools(TimeTool timeTool,
+                         MemoryTool memoryTool,
                          ReminderTool reminderTool,
                          ChatMessageTool chatMessageTool,
                          VoiceTool voiceTool,
@@ -75,6 +78,7 @@ public class HumanoidTools {
                          BraveSearchTool braveSearchTool,
                          FileSandbox sandbox) {
         this.timeTool = timeTool;
+        this.memoryTool = memoryTool;
         this.reminderTool = reminderTool;
         this.chatMessageTool = chatMessageTool;
         this.voiceTool = voiceTool;
@@ -116,6 +120,7 @@ public class HumanoidTools {
     public List<Object> create(ChatClient summarizerClient) {
         List<Object> tools = new ArrayList<>();
         tools.add(timeTool);
+        tools.add(memoryTool);
         tools.add(reminderTool);
         tools.add(chatMessageTool);
         tools.add(voiceTool);

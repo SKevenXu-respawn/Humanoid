@@ -15,6 +15,8 @@ const title = computed(() => (route.meta.title as string) || '管理台')
         <el-menu-item index="/users">用户白名单</el-menu-item>
         <el-menu-item index="/groups">群白名单</el-menu-item>
         <el-menu-item index="/contexts">上下文与总结</el-menu-item>
+        <el-menu-item index="/memories">记忆管理</el-menu-item>
+        <el-menu-item index="/prompts">提示词管理</el-menu-item>
         <el-menu-item index="/tasks">任务</el-menu-item>
         <el-menu-item index="/reminders">提醒</el-menu-item>
         <el-menu-item index="/video-queue">视频队列</el-menu-item>

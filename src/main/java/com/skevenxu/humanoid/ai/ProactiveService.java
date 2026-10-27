@@ -1,6 +1,7 @@
 package com.skevenxu.humanoid.ai;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.skevenxu.humanoid.ai.prompt.PromptService;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
 import com.skevenxu.humanoid.entity.BotContext;
@@ -21,12 +22,9 @@ import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -65,7 +63,7 @@ public class ProactiveService {
     private final int checkIntervalMinutes;
     private final int maxBrowseSessionsPerTick;
     private final Set<Long> userIds;
-    private final String proactivePrompt;
+    private final PromptService promptService;
     private final ChatClient chatClient;
     private final BotUserMapper userMapper;
     private final BotConversationMapper conversationMapper;
@@ -80,7 +78,7 @@ public class ProactiveService {
                             @Value("${humanoid.proactive.check-interval-minutes:25}") int checkIntervalMinutes,
                             @Value("${humanoid.proactive.max-browse-sessions-per-tick:2}") int maxBrowseSessionsPerTick,
                             @Value("${humanoid.proactive.user-ids:}") String userIds,
-                            @Value("classpath:prompts/proactive-prompt.txt") Resource proactivePrompt,
+                            PromptService promptService,
                             ChatClient.Builder chatClientBuilder,
                             HumanoidTools humanoidTools,
                             ObjectProvider<ToolCallbackProvider> toolCallbackProviders,
@@ -101,7 +99,7 @@ public class ProactiveService {
                 .filter(s -> !s.isEmpty())
                 .map(Long::parseLong)
                 .collect(Collectors.toSet());
-        this.proactivePrompt = loadPrompt(proactivePrompt);
+        this.promptService = promptService;
         this.userMapper = userMapper;
         this.conversationMapper = conversationMapper;
         this.stateMapper = stateMapper;
@@ -204,7 +202,7 @@ public class ProactiveService {
         String reply;
         ToolContext.set(new ToolContext.ChatScope(userId, "private", null));
         try {
-            reply = chatClient.prompt().system(proactivePrompt).user(context).call().content();
+            reply = chatClient.prompt().system(promptService.proactivePrompt()).user(context).call().content();
         } finally {
             ToolContext.clear();
         }
@@ -324,13 +322,5 @@ public class ProactiveService {
         state.setCreatedAt(LocalDateTime.now(ZONE));
         stateMapper.insert(state);
         return state;
-    }
-
-    private static String loadPrompt(Resource resource) {
-        try {
-            return resource.getContentAsString(StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new IllegalStateException("无法读取 prompts/proactive-prompt.txt", e);
-        }
     }
 }

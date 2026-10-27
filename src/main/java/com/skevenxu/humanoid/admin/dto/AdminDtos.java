@@ -82,6 +82,9 @@ public final class AdminDtos {
     public record FriendRequestHandleRequest(String remark) {
     }
 
+    public record FriendDeleteRequest(String notice) {
+    }
+
     public record FilteredFriendRequestView(String flag, String uin, String nick, String source,
                                             String reason, String msg, String groupCode,
                                             String time, String type) {
@@ -97,5 +100,14 @@ public final class AdminDtos {
     }
 
     public record SecretUpdateRequest(String value) {
+    }
+
+    public record MemoryUpdateRequest(String content, Integer importance, String status) {
+    }
+
+    public record MemorySummaryUpdateRequest(String summary) {
+    }
+
+    public record PromptUpdateRequest(String content) {
     }
 }

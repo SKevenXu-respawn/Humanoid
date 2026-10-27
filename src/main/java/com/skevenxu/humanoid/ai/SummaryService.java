@@ -1,6 +1,7 @@
 package com.skevenxu.humanoid.ai;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.skevenxu.humanoid.ai.prompt.PromptService;
 import com.skevenxu.humanoid.entity.BotConversation;
 import com.skevenxu.humanoid.entity.BotSummary;
 import com.skevenxu.humanoid.mapper.BotConversationMapper;
@@ -8,11 +9,8 @@ import com.skevenxu.humanoid.mapper.BotSummaryMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -33,19 +31,19 @@ public class SummaryService {
     private final BotSummaryMapper summaryMapper;
     private final BotConversationMapper conversationMapper;
     private final DeepSeekClient deepSeekClient;
-    private final String summarySystemPrompt;
+    private final PromptService promptService;
     private final int threshold;
     private final ConcurrentHashMap<String, Object> locks = new ConcurrentHashMap<>();
 
     public SummaryService(BotSummaryMapper summaryMapper,
                           BotConversationMapper conversationMapper,
                           DeepSeekClient deepSeekClient,
-                          @Value("classpath:prompts/summary-prompt.txt") Resource summaryPrompt,
+                          PromptService promptService,
                           @Value("${humanoid.ai.summary-threshold:100}") int threshold) {
         this.summaryMapper = summaryMapper;
         this.conversationMapper = conversationMapper;
         this.deepSeekClient = deepSeekClient;
-        this.summarySystemPrompt = loadPrompt(summaryPrompt);
+        this.promptService = promptService;
         this.threshold = threshold;
     }
 
@@ -122,7 +120,7 @@ public class SummaryService {
                         ? "无" : record.getSummary())
                 + "\n\n以下是需要合并的对话：\n" + transcript;
 
-        Optional<String> merged = deepSeekClient.chat(summarySystemPrompt,
+        Optional<String> merged = deepSeekClient.chat(promptService.summaryPrompt(),
                 List.of(DeepSeekClient.ChatMessage.user(userContent, List.of())));
         if (merged.isEmpty() || merged.get().isBlank()) {
             log.warn("子 AI 未返回总结 user_id={} group_id={}",
@@ -149,13 +147,5 @@ public class SummaryService {
 
     private static String scopeKey(BotConversation current) {
         return current.getUserId() + ":" + current.getMessageType() + ":" + scopeGroup(current);
-    }
-
-    private static String loadPrompt(Resource resource) {
-        try {
-            return resource.getContentAsString(StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new IllegalStateException("无法读取 prompts/summary-prompt.txt", e);
-        }
     }
 }

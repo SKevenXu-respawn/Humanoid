@@ -51,7 +51,8 @@ export const api = {
 
   friends: (keyword?: string) =>
     http.get('/friends', { params: { keyword } }).then((r) => r.data),
-  deleteFriend: (userId: number) => http.delete(`/friends/${userId}`),
+  deleteFriend: (userId: number, notice?: string) =>
+    http.delete(`/friends/${userId}`, { data: notice ? { notice } : undefined }),
   friendRequests: (params: Record<string, unknown>) =>
     http.get('/friends/requests', { params }).then((r) => r.data),
   approveFriendRequest: (id: number, remark: string) =>
@@ -76,7 +77,24 @@ export const api = {
   secrets: () => http.get('/secrets').then((r) => r.data),
   saveSecret: (key: string, value: string) =>
     http.put(`/secrets/${key}`, { value }).then((r) => r.data),
-  clearSecret: (key: string) => http.delete(`/secrets/${key}`).then((r) => r.data)
+  clearSecret: (key: string) => http.delete(`/secrets/${key}`).then((r) => r.data),
+
+  memories: (params: Record<string, unknown>) =>
+    http.get('/memories', { params }).then((r) => r.data),
+  updateMemory: (id: number, body: unknown) =>
+    http.put(`/memories/${id}`, body).then((r) => r.data),
+  deleteMemory: (id: number) => http.delete(`/memories/${id}`),
+  memorySummaries: (params: Record<string, unknown>) =>
+    http.get('/memories/summaries', { params }).then((r) => r.data),
+  updateMemorySummary: (id: number, summary: string) =>
+    http.put(`/memories/summaries/${id}`, { summary }).then((r) => r.data),
+  deleteMemorySummary: (id: number) => http.delete(`/memories/summaries/${id}`),
+  runMemorySummary: () => http.post('/memories/summaries/run').then((r) => r.data),
+
+  prompts: () => http.get('/prompts').then((r) => r.data),
+  savePrompt: (key: string, content: string) =>
+    http.put(`/prompts/${key}`, { content }).then((r) => r.data),
+  resetPrompt: (key: string) => http.delete(`/prompts/${key}`).then((r) => r.data)
 }
 
 export const imageUrl = (id: number) => `/api/admin/images/${id}`

@@ -23,6 +23,10 @@ const approveDialog = ref(false)
 const approving = ref<any>(null)
 const approveForm = reactive({ remark: '' })
 
+const deleteDialog = ref(false)
+const deletingFriend = ref<any>(null)
+const deleteNotice = ref('')
+
 const statusMeta: Record<string, { text: string; type: string }> = {
   PENDING: { text: '待处理', type: 'warning' },
   APPROVED: { text: '已同意', type: 'success' },
@@ -38,15 +42,19 @@ async function loadFriends() {
   }
 }
 
-async function removeFriend(row: any) {
-  const name = row.remark || row.nickname || row.userId
-  await ElMessageBox.confirm(
-    `确定删除好友 ${name}（${row.userId}）？删除前会自动向对方发送一条告知消息，然后调用 QQ 删除好友。`,
-    '删除好友',
-    { type: 'warning', confirmButtonText: '发送并删除', confirmButtonClass: 'el-button--danger' }
-  )
-  await api.deleteFriend(row.userId)
+function openDelete(row: any) {
+  deletingFriend.value = row
+  deleteNotice.value = ''
+  deleteDialog.value = true
+}
+
+async function confirmDelete() {
+  if (!deletingFriend.value) {
+    return
+  }
+  await api.deleteFriend(deletingFriend.value.userId, deleteNotice.value.trim() || undefined)
   ElMessage.success('已删除好友')
+  deleteDialog.value = false
   loadFriends()
 }
 
@@ -148,7 +156,7 @@ onMounted(loadFriends)
         <el-table-column prop="longNick" label="个性签名" min-width="180" show-overflow-tooltip />
         <el-table-column label="操作" width="100">
           <template #default="{ row }">
-            <el-button link type="danger" @click="removeFriend(row)">删除</el-button>
+            <el-button link type="danger" @click="openDelete(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -242,4 +250,27 @@ onMounted(loadFriends)
       </el-table>
     </el-tab-pane>
   </el-tabs>
+
+  <el-dialog v-model="deleteDialog" title="删除好友" width="520px">
+    <div style="margin-bottom: 8px">
+      确定删除好友
+      <b>{{ deletingFriend?.remark || deletingFriend?.nickname || deletingFriend?.userId }}</b>
+      （{{ deletingFriend?.userId }}）？
+    </div>
+    <div style="color: #909399; font-size: 13px; margin-bottom: 12px">
+      删除前会先向对方发送告知消息；留空则使用默认告知文本。
+    </div>
+    <el-input
+      v-model="deleteNotice"
+      type="textarea"
+      :rows="4"
+      maxlength="500"
+      show-word-limit
+      placeholder="留空使用默认告知文本"
+    />
+    <template #footer>
+      <el-button @click="deleteDialog = false">取消</el-button>
+      <el-button type="danger" @click="confirmDelete">发送并删除</el-button>
+    </template>
+  </el-dialog>
 </template>

@@ -10,6 +10,8 @@ import FriendsView from '../views/FriendsView.vue'
 import VoiceView from '../views/VoiceView.vue'
 import VideoQueueView from '../views/VideoQueueView.vue'
 import SecretsView from '../views/SecretsView.vue'
+import MemoriesView from '../views/MemoriesView.vue'
+import PromptsView from '../views/PromptsView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -24,7 +26,9 @@ const router = createRouter({
     { path: '/friends', component: FriendsView, meta: { title: '好友管理' } },
     { path: '/voice', component: VoiceView, meta: { title: '语音设置' } },
     { path: '/video-queue', component: VideoQueueView, meta: { title: '视频队列' } },
-    { path: '/secrets', component: SecretsView, meta: { title: '密钥配置' } }
+    { path: '/secrets', component: SecretsView, meta: { title: '密钥配置' } },
+    { path: '/memories', component: MemoriesView, meta: { title: '记忆管理' } },
+    { path: '/prompts', component: PromptsView, meta: { title: '提示词管理' } }
   ]
 })
 

@@ -82,7 +82,8 @@ public class ToolProgressNotifier {
     private static final Set<String> QUIET_TOOLS = Set.of(
             "currentTime", "listTools", "TodoWrite",
             "sendImage", "sendFace", "sendMessages", "sendFile", "getFavoriteFaces", "renderSvg",
-            "sendVoice", "shareVideo", "videoQueueStatus", "nextVideo"
+            "sendVoice", "shareVideo", "videoQueueStatus", "nextVideo",
+            "rememberPrivate", "rememberShared", "recallMemory"
     );
 
     private final LlbotApiClient llbotApiClient;

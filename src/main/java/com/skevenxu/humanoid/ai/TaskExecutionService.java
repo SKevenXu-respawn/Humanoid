@@ -1,6 +1,7 @@
 package com.skevenxu.humanoid.ai;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.skevenxu.humanoid.ai.prompt.PromptService;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
 import com.skevenxu.humanoid.entity.BotConversation;
 import com.skevenxu.humanoid.entity.BotTask;
@@ -15,12 +16,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.tool.method.MethodToolCallbackProvider;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -48,7 +46,7 @@ public class TaskExecutionService {
     private final ContextStore contextStore;
     private final ToolCallLogger toolCallLogger;
     private final ToolProgressNotifier toolProgressNotifier;
-    private final String executorPrompt;
+    private final PromptService promptService;
     private final boolean enabled;
     private final int maxAttempts;
     private final Set<Long> running = ConcurrentHashMap.newKeySet();
@@ -62,7 +60,7 @@ public class TaskExecutionService {
                                 ContextStore contextStore,
                                 ToolCallLogger toolCallLogger,
                                 ToolProgressNotifier toolProgressNotifier,
-                                @Value("classpath:prompts/task-executor-prompt.txt") Resource executorPrompt,
+                                PromptService promptService,
                                 @Value("${humanoid.task.executor.enabled:true}") boolean enabled,
                                 @Value("${humanoid.task.executor.max-attempts:3}") int maxAttempts) {
         var executorCallbacks = MethodToolCallbackProvider.builder()
@@ -80,7 +78,7 @@ public class TaskExecutionService {
         this.llbotApiClient = llbotApiClient;
         this.conversationMapper = conversationMapper;
         this.contextStore = contextStore;
-        this.executorPrompt = loadPrompt(executorPrompt);
+        this.promptService = promptService;
         this.enabled = enabled;
         this.maxAttempts = maxAttempts;
     }
@@ -140,7 +138,7 @@ public class TaskExecutionService {
         toolProgressNotifier.begin();
         try {
             chatClient.prompt()
-                    .system(executorPrompt)
+                    .system(promptService.taskExecutorPrompt())
                     .user(context)
                     .call()
                     .content();
@@ -257,13 +255,5 @@ public class TaskExecutionService {
         return stepMapper.selectList(new LambdaQueryWrapper<BotTaskStep>()
                 .eq(BotTaskStep::getTaskId, taskId)
                 .orderByAsc(BotTaskStep::getStepNo));
-    }
-
-    private static String loadPrompt(Resource resource) {
-        try {
-            return resource.getContentAsString(StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new IllegalStateException("无法读取 prompts/task-executor-prompt.txt", e);
-        }
     }
 }

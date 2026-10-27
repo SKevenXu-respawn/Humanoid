@@ -2,6 +2,7 @@ package com.skevenxu.humanoid.admin.controller;
 
 import com.skevenxu.humanoid.admin.dto.AdminDtos.FilteredFriendHandleRequest;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.FilteredFriendRequestView;
+import com.skevenxu.humanoid.admin.dto.AdminDtos.FriendDeleteRequest;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.FriendRequestHandleRequest;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.FriendRequestView;
 import com.skevenxu.humanoid.admin.dto.AdminDtos.FriendView;
@@ -36,8 +37,9 @@ public class FriendAdminController {
     }
 
     @DeleteMapping("/{userId}")
-    public Map<String, Object> delete(@PathVariable Long userId) {
-        friendService.delete(userId);
+    public Map<String, Object> delete(@PathVariable Long userId,
+                                      @RequestBody(required = false) FriendDeleteRequest request) {
+        friendService.delete(userId, request == null ? null : request.notice());
         return Map.of("ok", true);
     }
 
