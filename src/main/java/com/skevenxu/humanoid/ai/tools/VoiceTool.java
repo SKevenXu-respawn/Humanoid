@@ -50,9 +50,14 @@ public class VoiceTool {
 
     @Tool(description = """
             把一段文本合成为语音并发送到当前聊天（私聊或群聊）。
-            适合用户要求“发语音/说出来/读给我听”时使用。text 是要读出来的内容，
-            建议不超过 300 字；发送后最终回复只需简短说明，不要重复语音全文。""")
-    public String sendVoice(@ToolParam(description = "要合成并发送的文本") String text) {
+            适合用户要求“发语音/说出来/读给我听”时使用。text 是要读出来的内容，可以包含你编辑好的语音标签；
+            建议不超过 300 字。contextTexts 是语音指令列表（context_texts），用来描述语气、情绪、语速或风格，
+            例如 ["用温柔撒娇的语气说"]；不需要时可以省略。发送后最终回复只需简短说明，不要重复语音全文。""")
+    public String sendVoice(
+            @ToolParam(description = "要合成并发送的文本，可包含你编辑好的语音标签") String text,
+            @ToolParam(required = false,
+                    description = "语音指令列表（context_texts），描述语气/情绪/语速/风格；不需要时省略")
+            List<String> contextTexts) {
         ToolContext.ChatScope scope = ToolContext.get();
         if (scope == null) {
             return "错误：无法确定当前会话";
@@ -67,7 +72,7 @@ public class VoiceTool {
 
         byte[] audio;
         try {
-            audio = voiceClient.synthesize(text, speaker);
+            audio = voiceClient.synthesize(text, speaker, contextTexts);
         } catch (Exception e) {
             log.warn("语音合成失败 user_id={} group_id={} speaker={}: {}",
                     scope.userId(), scope.groupId(), speaker, e.toString());
@@ -96,8 +101,9 @@ public class VoiceTool {
         saveBotMessage(scope, content, messageId.get());
         contextStore.appendAssistant(scope.userId(), scope.messageType(), scope.groupId(),
                 content, List.of());
-        log.info("工具调用 sendVoice user_id={} group_id={} speaker={} chars={} audio_bytes={} message_id={}",
-                scope.userId(), scope.groupId(), speaker, text.trim().length(), audio.length, messageId.get());
+        log.info("工具调用 sendVoice user_id={} group_id={} speaker={} chars={} instructions={} audio_bytes={} message_id={}",
+                scope.userId(), scope.groupId(), speaker, text.trim().length(),
+                contextTexts == null ? 0 : contextTexts.size(), audio.length, messageId.get());
         return "已发送语音（" + text.trim().length() + " 字）";
     }
 

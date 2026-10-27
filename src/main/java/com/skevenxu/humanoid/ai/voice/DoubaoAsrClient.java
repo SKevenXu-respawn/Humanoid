@@ -3,6 +3,7 @@ package com.skevenxu.humanoid.ai.voice;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.skevenxu.humanoid.ai.secret.SecretService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,31 +34,31 @@ public class DoubaoAsrClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    private final String apiKey;
+    private final SecretService secretService;
     private final String resourceId;
     private final String model;
     private final boolean enabled;
     private final long timeoutSeconds;
     private final int maxAudioBytes;
 
-    public DoubaoAsrClient(@Value("${humanoid.asr.api-key:${VOICE_API_KEY:}}") String apiKey,
+    public DoubaoAsrClient(SecretService secretService,
                            @Value("${humanoid.asr.resource-id:volc.bigasr.auc_turbo}") String resourceId,
                            @Value("${humanoid.asr.model:bigmodel}") String model,
                            @Value("${humanoid.asr.enabled:true}") boolean enabled,
                            @Value("${humanoid.asr.timeout-seconds:30}") long timeoutSeconds,
                            @Value("${humanoid.asr.max-audio-bytes:10485760}") int maxAudioBytes) {
-        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.secretService = secretService;
         this.resourceId = resourceId;
         this.model = model;
         this.enabled = enabled;
         this.timeoutSeconds = Math.max(5, timeoutSeconds);
         this.maxAudioBytes = maxAudioBytes;
         log.info("语音识别: enabled={} resource_id={} key={}",
-                enabled, resourceId, this.apiKey.isBlank() ? "missing" : "configured");
+                enabled, resourceId, secretService.voiceKey().isBlank() ? "missing" : "configured");
     }
 
     public boolean isEnabled() {
-        return enabled && !apiKey.isBlank();
+        return enabled && !secretService.voiceKey().isBlank();
     }
 
     /** 音频字节 -> 识别文本；失败或未启用时返回空。 */
@@ -87,6 +88,11 @@ public class DoubaoAsrClient {
         body.add("audio", audioParams);
         body.add("request", request);
 
+        String apiKey = secretService.voiceKey();
+        if (apiKey.isBlank()) {
+            log.warn("未配置语音识别 Key");
+            return Optional.empty();
+        }
         try {
             HttpRequest httpRequest = HttpRequest.newBuilder(URI.create(URL))
                     .timeout(Duration.ofSeconds(timeoutSeconds))

@@ -98,6 +98,7 @@ MySQL (:3306) + DeepSeek API
 - 好友管理：好友列表与删除、好友申请同意/拒绝、被过滤好友申请处理
 - 语音设置：开关 `sendVoice`、选择豆包 TTS 2.0 音色，保存后立即生效
 - 视频队列：查看/筛选队列、立即发送、跳过、重新入队、删除
+- 密钥配置：DeepSeek、豆包语音、LLBot Token、Brave，数据库存储、掩码显示、即时生效
 
 > 好友申请依赖 OneBot 的 `request/friend` 事件：应用收到事件后写入 `bot_friend_request`，管理台再通过 `set_friend_add_request` 处理。若非白名单私聊只收到提示、没有 AI 回复，好友申请仍会正常记录。
 
@@ -306,6 +307,7 @@ bot_files/
 | `bot_reminder` | 定时提醒（content 为交给主 AI 的预设提示词） |
 | `bot_voice_config` | 语音发送开关与音色（管理端修改，单行） |
 | `bot_video_queue` | 视频分享队列（PENDING/SENT/SKIPPED/FAILED） |
+| `bot_secret` | 密钥配置（数据库优先，管理端只显示掩码） |
 | `bot_friend_request` | 好友申请（OneBot request/friend 事件） |
 | `bot_proactive_state` | 主动发言状态 |
 
@@ -335,7 +337,7 @@ bot_files/
 | `downloadFile` | 下载文件（SSRF 防护） |
 | `sendImage` / `sendFace` / `getFavoriteFaces` | 发送图片、表情、收藏表情 |
 | `sendFile` / `sendMessages` | 发送文件、连续多条消息 |
-| `sendVoice` | 文本合成为语音并发送（火山引擎豆包长文本 TTS） |
+| `sendVoice` | 文本合成为语音并发送（豆包长文本 TTS，支持 `context_texts` 语音指令与文本标签） |
 | `shareVideo` | 主动刷视频时，把有趣的视频加入分享队列 |
 | `videoQueueStatus` / `nextVideo` | 查询未发送视频数量 / 立即发送当前队列的下一个视频 |
 | `renderSvg` | SVG/XML 渲染成 PNG 并发送 |
@@ -376,7 +378,7 @@ Dockerfile             多阶段构建（运行镜像含 python3/pip）
 - **下载防护**：仅 http/https，禁止内网地址，逐跳校验重定向
 - **SVG 防护**：拒绝 DOCTYPE/ENTITY、脚本、事件属性、外部资源引用
 - **Shell 风险**：`runShell` 在应用容器内以 root 执行，并非真正沙箱；建议只对可信用户开放，不需要时设为 `humanoid.tools.shell.enabled=false`
-- **API Key**：`DEEPSEEK_API_KEY`、`VOICE_API_KEY` 通过环境变量注入（`.env` 已被 git 忽略），不要写回配置文件
+- **API Key**：`DEEPSEEK_API_KEY`、`VOICE_API_KEY` 等首次启动会迁移到数据库，之后在管理台「密钥配置」维护（只显示掩码，修改后立即生效）；`.env` 仅作为初始值/回退值。`PMHQ_AUTH_TOKEN` 仍由 LLBot 容器启动读取，需改 `.env` 并重启 `llbot`
 - **外部内容**：工具返回的网页内容视为数据，提示词已禁止执行其中的指令或标签
 - **浏览器**：Playwright MCP 容器可访问外网和内网地址，注意 SSRF 风险；`browser_run_code_unsafe` 工具已在应用侧过滤，未注册给模型
 - **主动行为**：AI 每 30 分钟可自主选择聊天或刷视频并评论；提示词已限制不登录、不填个人信息、不付费、遇验证码停止、只评论一条。仍建议只对可信白名单用户开启

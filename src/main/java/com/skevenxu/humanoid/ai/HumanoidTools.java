@@ -1,6 +1,7 @@
 package com.skevenxu.humanoid.ai;
 
 import com.skevenxu.humanoid.ai.tools.ChatMessageTool;
+import com.skevenxu.humanoid.ai.tools.BraveSearchTool;
 import com.skevenxu.humanoid.ai.tools.DownloadTool;
 import com.skevenxu.humanoid.ai.tools.HumanoidSkillsTool;
 import com.skevenxu.humanoid.ai.tools.ImageViewTool;
@@ -18,7 +19,6 @@ import com.skevenxu.humanoid.ai.tools.VoiceTool;
 import com.skevenxu.humanoid.ai.tools.VideoQueueTool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springaicommunity.agent.tools.BraveWebSearchTool;
 import org.springaicommunity.agent.tools.SmartWebFetchTool;
 import org.springaicommunity.agent.tools.TodoWriteTool;
 import org.springframework.ai.chat.client.ChatClient;
@@ -54,8 +54,8 @@ public class HumanoidTools {
     private final HumanoidSkillsTool skillsTool;
     private final SvgTool svgTool;
     private final SandboxFileTools sandboxFileTools;
+    private final BraveSearchTool braveSearchTool;
     private final FileSandbox sandbox;
-    private final String braveApiKey;
 
     public HumanoidTools(TimeTool timeTool,
                          ReminderTool reminderTool,
@@ -72,8 +72,8 @@ public class HumanoidTools {
                          HumanoidSkillsTool skillsTool,
                          SvgTool svgTool,
                          SandboxFileTools sandboxFileTools,
-                         FileSandbox sandbox,
-                         @Value("${humanoid.tools.brave-api-key:}") String braveApiKey) {
+                         BraveSearchTool braveSearchTool,
+                         FileSandbox sandbox) {
         this.timeTool = timeTool;
         this.reminderTool = reminderTool;
         this.chatMessageTool = chatMessageTool;
@@ -89,8 +89,8 @@ public class HumanoidTools {
         this.skillsTool = skillsTool;
         this.svgTool = svgTool;
         this.sandboxFileTools = sandboxFileTools;
+        this.braveSearchTool = braveSearchTool;
         this.sandbox = sandbox;
-        this.braveApiKey = braveApiKey;
         log.info("文件沙箱: base={} skills={} tools={}",
                 sandbox.baseDir(), sandbox.skillsDir(), sandbox.toolsDir());
     }
@@ -188,9 +188,7 @@ public class HumanoidTools {
         List<Object> tools = new ArrayList<>();
         tools.add(SmartWebFetchTool.builder(summarizerClient).build());
         tools.add(TodoWriteTool.builder().build());
-        if (!braveApiKey.isBlank()) {
-            tools.add(BraveWebSearchTool.builder(braveApiKey).build());
-        }
+        tools.add(braveSearchTool);
         return tools;
     }
 }

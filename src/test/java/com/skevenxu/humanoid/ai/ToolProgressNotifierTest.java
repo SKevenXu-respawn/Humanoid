@@ -1,5 +1,6 @@
 package com.skevenxu.humanoid.ai;
 
+import com.skevenxu.humanoid.ai.secret.SecretService;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
 import com.skevenxu.humanoid.llbot.LlbotApiClient;
 import org.junit.jupiter.api.AfterEach;
@@ -88,7 +89,7 @@ class ToolProgressNotifierTest {
         private final List<String> messages = new ArrayList<>();
 
         private CapturingClient() {
-            super("http://127.0.0.1:1", "");
+            super("http://127.0.0.1:1", org.mockito.Mockito.mock(SecretService.class));
         }
 
         @Override

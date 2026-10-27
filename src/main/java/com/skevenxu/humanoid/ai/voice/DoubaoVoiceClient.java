@@ -3,6 +3,7 @@ package com.skevenxu.humanoid.ai.voice;
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.skevenxu.humanoid.ai.secret.SecretService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -38,7 +40,7 @@ public class DoubaoVoiceClient {
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
 
-    private final String apiKey;
+    private final SecretService secretService;
     private final String resourceId;
     private final String speaker;
     private final String format;
@@ -48,7 +50,7 @@ public class DoubaoVoiceClient {
     private final long timeoutMillis;
     private final int maxAudioBytes;
 
-    public DoubaoVoiceClient(@Value("${humanoid.voice.api-key:${VOICE_API_KEY:}}") String apiKey,
+    public DoubaoVoiceClient(SecretService secretService,
                              @Value("${humanoid.voice.resource-id:seed-tts-2.0}") String resourceId,
                              @Value("${humanoid.voice.speaker:zh_female_jiaochuannv_uranus_bigtts}") String speaker,
                              @Value("${humanoid.voice.format:mp3}") String format,
@@ -57,7 +59,7 @@ public class DoubaoVoiceClient {
                              @Value("${humanoid.voice.poll-interval-ms:1000}") long pollIntervalMillis,
                              @Value("${humanoid.voice.timeout-seconds:90}") long timeoutSeconds,
                              @Value("${humanoid.voice.max-audio-bytes:10485760}") int maxAudioBytes) {
-        this.apiKey = apiKey == null ? "" : apiKey.trim();
+        this.secretService = secretService;
         this.resourceId = resourceId;
         this.speaker = speaker;
         this.format = format;
@@ -66,22 +68,27 @@ public class DoubaoVoiceClient {
         this.pollIntervalMillis = Math.max(200, pollIntervalMillis);
         this.timeoutMillis = Math.max(5, timeoutSeconds) * 1000;
         this.maxAudioBytes = maxAudioBytes;
-        if (this.apiKey.isBlank()) {
-            log.warn("未配置语音合成 Key，请设置环境变量 VOICE_API_KEY");
+        if (!isConfigured()) {
+            log.warn("未配置语音合成 Key，请在管理端密钥配置中设置 voice_api_key");
         }
     }
 
     public boolean isConfigured() {
-        return !apiKey.isBlank();
+        return !secretService.voiceKey().isBlank();
     }
 
     /** 合成语音并返回音频字节（默认 mp3）。 */
     public byte[] synthesize(String text) {
-        return synthesize(text, null);
+        return synthesize(text, null, null);
     }
 
     /** 使用指定音色合成；speaker 为空时使用配置默认音色。 */
     public byte[] synthesize(String text, String speakerOverride) {
+        return synthesize(text, speakerOverride, null);
+    }
+
+    /** 使用指定音色和语音指令（context_texts）合成。 */
+    public byte[] synthesize(String text, String speakerOverride, List<String> contextTexts) {
         if (!isConfigured()) {
             throw new IllegalStateException("未配置语音合成 Key（VOICE_API_KEY）");
         }
@@ -94,17 +101,31 @@ public class DoubaoVoiceClient {
         }
         String voice = speakerOverride == null || speakerOverride.isBlank()
                 ? speaker : speakerOverride.trim();
+        List<String> instructions = normalizeInstructions(contextTexts);
 
         long started = System.currentTimeMillis();
-        String taskId = submit(content, voice);
+        String taskId = submit(content, voice, instructions);
         String audioUrl = poll(taskId);
         byte[] audio = download(audioUrl);
-        log.info("语音合成完成 task_id={} speaker={} chars={} bytes={} elapsed={}ms",
-                taskId, voice, content.length(), audio.length, System.currentTimeMillis() - started);
+        log.info("语音合成完成 task_id={} speaker={} chars={} instructions={} bytes={} elapsed={}ms",
+                taskId, voice, content.length(), instructions.size(), audio.length,
+                System.currentTimeMillis() - started);
         return audio;
     }
 
-    private String submit(String text, String voice) {
+    private static List<String> normalizeInstructions(List<String> contextTexts) {
+        if (contextTexts == null || contextTexts.isEmpty()) {
+            return List.of();
+        }
+        return contextTexts.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .map(String::trim)
+                .map(value -> value.length() > 500 ? value.substring(0, 500) : value)
+                .limit(5)
+                .toList();
+    }
+
+    private String submit(String text, String voice, List<String> contextTexts) {
         JsonObject uid = new JsonObject();
         uid.addProperty("uid", UUID.randomUUID().toString());
 
@@ -118,6 +139,10 @@ public class DoubaoVoiceClient {
         reqParams.addProperty("speaker", voice);
         reqParams.add("audio_params", audioParams);
         reqParams.addProperty("additions", "{}");
+        if (!contextTexts.isEmpty()) {
+            // 接口要求 context_texts 为字符串，内容为 JSON 数组（不是 JSON 数组本身）
+            reqParams.addProperty("context_texts", GSON.toJson(contextTexts));
+        }
 
         JsonObject body = new JsonObject();
         body.add("user", uid);
@@ -186,6 +211,10 @@ public class DoubaoVoiceClient {
     }
 
     private JsonObject post(String url, JsonObject body) {
+        String apiKey = secretService.voiceKey();
+        if (apiKey.isBlank()) {
+            throw new IllegalStateException("未配置语音合成 Key（voice_api_key）");
+        }
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(30))

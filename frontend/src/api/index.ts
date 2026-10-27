@@ -71,7 +71,12 @@ export const api = {
   sendVideoQueue: (id: number) => http.post(`/video-queue/${id}/send`).then((r) => r.data),
   skipVideoQueue: (id: number) => http.post(`/video-queue/${id}/skip`).then((r) => r.data),
   requeueVideoQueue: (id: number) => http.post(`/video-queue/${id}/requeue`).then((r) => r.data),
-  deleteVideoQueue: (id: number) => http.delete(`/video-queue/${id}`)
+  deleteVideoQueue: (id: number) => http.delete(`/video-queue/${id}`),
+
+  secrets: () => http.get('/secrets').then((r) => r.data),
+  saveSecret: (key: string, value: string) =>
+    http.put(`/secrets/${key}`, { value }).then((r) => r.data),
+  clearSecret: (key: string) => http.delete(`/secrets/${key}`).then((r) => r.data)
 }
 
 export const imageUrl = (id: number) => `/api/admin/images/${id}`

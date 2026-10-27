@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.skevenxu.humanoid.ai.secret.SecretService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
@@ -46,28 +47,24 @@ public class DeepSeekClient {
             .connectTimeout(Duration.ofSeconds(10))
             .build();
     private final ImageDataLoader imageDataLoader;
+    private final SecretService secretService;
     private final String baseUrl;
-    private final String apiKey;
     private final String model;
     private final boolean thinkingEnabled;
     private final String reasoningEffort;
     private final int maxToolRounds;
 
     public DeepSeekClient(ImageDataLoader imageDataLoader,
+                          SecretService secretService,
                           @Value("${spring.ai.deepseek.base-url:https://api.deepseek.com}") String baseUrl,
-                          @Value("${spring.ai.deepseek.api-key}") String apiKey,
                           @Value("${spring.ai.deepseek.chat.options.model:deepseek-flash}") String model,
                           @Value("${humanoid.ai.thinking:disabled}") String thinking,
                           @Value("${humanoid.ai.max-tool-rounds:25}") int maxToolRounds) {
         this.imageDataLoader = imageDataLoader;
+        this.secretService = secretService;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
-        this.apiKey = apiKey;
         this.model = model;
         this.maxToolRounds = maxToolRounds;
-        if (apiKey == null || apiKey.isBlank()) {
-            log.warn("未配置 DeepSeek API Key，请设置环境变量 DEEPSEEK_API_KEY");
-        }
-
         String level = thinking == null ? "disabled" : thinking.trim().toLowerCase();
         if ("disabled".equals(level)) {
             this.thinkingEnabled = false;
@@ -207,6 +204,10 @@ public class DeepSeekClient {
     }
 
     private HttpResponse<String> send(JsonObject body) throws Exception {
+        String apiKey = secretService.deepseekKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("未配置 DeepSeek API Key，请在管理端密钥配置中设置");
+        }
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
                 .timeout(Duration.ofSeconds(90))
                 .header("Content-Type", "application/json")

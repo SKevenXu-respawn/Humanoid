@@ -95,4 +95,7 @@ public final class AdminDtos {
 
     public record VoiceConfigUpdateRequest(Boolean enabled, String speaker) {
     }
+
+    public record SecretUpdateRequest(String value) {
+    }
 }

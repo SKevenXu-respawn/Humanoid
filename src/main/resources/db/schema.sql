@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS bot_friend_request (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='好友申请';
 
+-- 密钥配置：值优先于环境变量/配置文件，管理端只显示掩码
+CREATE TABLE IF NOT EXISTS bot_secret (
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    secret_key   VARCHAR(64)  NOT NULL COMMENT '配置键，如 deepseek_api_key',
+    secret_value VARCHAR(2000) NOT NULL COMMENT '密钥明文（仅服务端可见）',
+    updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_secret_key (secret_key)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='密钥配置';
+
 -- 语音发送配置（单行，id=1）：管理端可改音色与开关，即时生效
 CREATE TABLE IF NOT EXISTS bot_voice_config (
     id         BIGINT       NOT NULL COMMENT '固定为 1',

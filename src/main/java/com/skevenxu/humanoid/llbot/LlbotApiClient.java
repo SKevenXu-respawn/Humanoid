@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import com.skevenxu.humanoid.ai.secret.SecretService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,12 +31,12 @@ public class LlbotApiClient {
             .connectTimeout(Duration.ofSeconds(5))
             .build();
     private final String baseUrl;
-    private final String token;
+    private final SecretService secretService;
 
     public LlbotApiClient(@Value("${llbot.api-url:http://llbot:3000}") String baseUrl,
-                          @Value("${llbot.api-token:}") String token) {
+                          SecretService secretService) {
         this.baseUrl = baseUrl;
-        this.token = token;
+        this.secretService = secretService;
     }
 
     public Optional<Long> sendPrivate(Long userId, String message) {
@@ -74,6 +75,7 @@ public class LlbotApiClient {
                     .uri(URI.create(baseUrl + "/fetch_custom_face"))
                     .timeout(Duration.ofSeconds(15))
                     .GET();
+            String token = secretService.llbotToken();
             if (!token.isBlank()) {
                 request.header("Authorization", "Bearer " + token);
             }
@@ -299,6 +301,7 @@ public class LlbotApiClient {
                     .timeout(timeout)
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)));
+            String token = secretService.llbotToken();
             if (!token.isBlank()) {
                 request.header("Authorization", "Bearer " + token);
             }
