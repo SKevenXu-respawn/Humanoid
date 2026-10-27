@@ -6,7 +6,7 @@ import com.google.gson.JsonParser;
 import com.skevenxu.humanoid.ai.tools.TaskTool;
 import com.skevenxu.humanoid.ai.tools.ToolContext;
 import com.skevenxu.humanoid.ai.memory.MemoryService;
-import com.skevenxu.humanoid.ai.prompt.PromptService;
+import com.skevenxu.humanoid.ai.prompt.UserPromptService;
 import com.skevenxu.humanoid.ai.voice.VoiceConfigService;
 import com.skevenxu.humanoid.entity.BotContext;
 import com.skevenxu.humanoid.entity.BotConversation;
@@ -60,7 +60,7 @@ public class AiChatService {
     private final ImageRefResolver imageRefResolver;
     private final LlbotApiClient llbotApiClient;
     private final SummaryService summaryService;
-    private final PromptService promptService;
+    private final UserPromptService userPromptService;
     private final int maxImages;
     private final int recentToolCalls;
     private final int contextMessages;
@@ -82,7 +82,7 @@ public class AiChatService {
                          ImageRefResolver imageRefResolver,
                          LlbotApiClient llbotApiClient,
                          SummaryService summaryService,
-                         PromptService promptService,
+                         UserPromptService userPromptService,
                          @Value("${humanoid.ai.max-images:4}") int maxImages,
                          @Value("${humanoid.ai.recent-tool-calls:8}") int recentToolCalls,
                          @Value("${humanoid.ai.context-messages:100}") int contextMessages,
@@ -102,7 +102,7 @@ public class AiChatService {
         this.chatClient = buildChatClient(chatClientBuilder);
         this.llbotApiClient = llbotApiClient;
         this.summaryService = summaryService;
-        this.promptService = promptService;
+        this.userPromptService = userPromptService;
         this.maxImages = maxImages;
         this.recentToolCalls = recentToolCalls;
         this.contextMessages = contextMessages;
@@ -155,7 +155,10 @@ public class AiChatService {
     @Async
     public void replyAsync(BotConversation userMessage) {
         try {
-            String basePrompt = promptService.systemPrompt();
+            String basePrompt = userPromptService.systemPromptFor(userMessage.getUserId());
+            log.info("主 AI 系统提示词 user_id={} custom={} chars={}",
+                    userMessage.getUserId(), userPromptService.hasCustom(userMessage.getUserId()),
+                    basePrompt.length());
             ToolContext.ChatScope memoryScope = new ToolContext.ChatScope(
                     userMessage.getUserId(), userMessage.getMessageType(), userMessage.getGroupId());
             String summary = PromptSanitizer.clean(summaryService.getSummary(userMessage));

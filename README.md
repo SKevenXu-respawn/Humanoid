@@ -103,6 +103,7 @@ MySQL (:3306) + DeepSeek API
 - 上下文与总结：按会话查看消息与图片、编辑/删除单条上下文、编辑/删除滚动总结、清空上下文
 - 记忆管理：长期记忆/记忆总结的筛选、编辑、删除
 - 提示词管理：系统/总结/主动行为/任务执行器/记忆总结提示词，数据库存储、可恢复默认
+- 用户提示词：按 QQ 绑定自定义系统提示词，可从全局系统提示词载入模板
 - 任务：新建、步骤管理、开始/暂停/恢复/完成/删除
 - 提醒：新建、立即手动触发、取消、失败重试
 - 好友管理：好友列表与删除、好友申请同意/拒绝、被过滤好友申请处理
@@ -272,6 +273,8 @@ bot_files/
 | `humanoid.ai.max-images` | 4 | 单次请求最多图片数 |
 | `humanoid.ai.recent-tool-calls` | 20 | 注入系统提示词的最近工具调用数 |
 | `humanoid.ai.max-tool-rounds` | -1 | 原生通道工具循环轮数，-1 表示不限制（硬保护 1000 轮） |
+| `humanoid.ai.http-connect-timeout-seconds` | 10 | 模型 HTTP 连接超时 |
+| `humanoid.ai.http-read-timeout-seconds` | 180 | 模型 HTTP 读超时（长文/多轮工具调用） |
 | `humanoid.ai.tool-progress.enabled` | true | 工具调用时向用户发送进度提示 |
 | `humanoid.ai.tool-progress.min-interval-seconds` | 8 | 两条进度消息的最小间隔 |
 | `humanoid.ai.tool-progress.max-messages` | 8 | 单个回合最多发送的进度消息数 |
@@ -300,6 +303,8 @@ bot_files/
 | `humanoid.memory.summary.*` | 见文件 | 记忆总结：每日 cron、最小记忆数、最大保留天数、单次处理作用域/记忆数 |
 
 提示词首次启动会从 `src/main/resources/prompts/` 迁移到 `bot_prompt`，之后在管理台「提示词管理」修改，保存后下一次调用生效；恢复默认会删除数据库覆盖。
+
+用户自定义提示词在「用户提示词」页按 QQ 绑定，可一键载入全局系统提示词作为模板。处理该 QQ 的消息时优先使用自定义提示词；没有绑定或删除绑定后回退全局系统提示词。
 | `humanoid.reminder.*` | 见文件 | 提醒派发间隔与重试次数 |
 | `humanoid.task.executor.*` | 见文件 | 后台任务执行器 |
 
@@ -325,6 +330,7 @@ bot_files/
 | `bot_video_queue` | 视频分享队列（PENDING/SENT/SKIPPED/FAILED） |
 | `bot_secret` | 密钥配置（数据库优先，管理端只显示掩码） |
 | `bot_prompt` | 提示词配置（数据库优先，classpath 文件作为默认值） |
+| `bot_user_prompt` | 按 QQ 绑定的自定义系统提示词（存在时优先于全局） |
 | `bot_friend_request` | 好友申请（OneBot request/friend 事件） |
 | `bot_proactive_state` | 主动发言状态 |
 

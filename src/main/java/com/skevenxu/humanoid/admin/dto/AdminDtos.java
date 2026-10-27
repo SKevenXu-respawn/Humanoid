@@ -110,4 +110,11 @@ public final class AdminDtos {
 
     public record PromptUpdateRequest(String content) {
     }
+
+    public record UserPromptView(Long userId, String nickname, String content,
+                                 LocalDateTime updatedAt) {
+    }
+
+    public record UserPromptUpdateRequest(String content) {
+    }
 }

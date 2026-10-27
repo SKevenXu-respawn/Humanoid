@@ -185,6 +185,18 @@ CREATE TABLE IF NOT EXISTS bot_friend_request (
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='好友申请';
 
+-- 用户自定义系统提示词：按 QQ 绑定，存在时优先于全局系统提示词
+CREATE TABLE IF NOT EXISTS bot_user_prompt (
+    id         BIGINT   NOT NULL AUTO_INCREMENT,
+    user_id    BIGINT   NOT NULL COMMENT 'QQ 号',
+    content    LONGTEXT NOT NULL COMMENT '该用户的自定义系统提示词',
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_user_id (user_id)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='用户自定义系统提示词';
+
 -- 提示词：数据库优先于 classpath 默认文件，管理端可编辑
 CREATE TABLE IF NOT EXISTS bot_prompt (
     id         BIGINT       NOT NULL AUTO_INCREMENT,

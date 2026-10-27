@@ -12,6 +12,7 @@ import VideoQueueView from '../views/VideoQueueView.vue'
 import SecretsView from '../views/SecretsView.vue'
 import MemoriesView from '../views/MemoriesView.vue'
 import PromptsView from '../views/PromptsView.vue'
+import UserPromptsView from '../views/UserPromptsView.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -28,7 +29,8 @@ const router = createRouter({
     { path: '/video-queue', component: VideoQueueView, meta: { title: '视频队列' } },
     { path: '/secrets', component: SecretsView, meta: { title: '密钥配置' } },
     { path: '/memories', component: MemoriesView, meta: { title: '记忆管理' } },
-    { path: '/prompts', component: PromptsView, meta: { title: '提示词管理' } }
+    { path: '/prompts', component: PromptsView, meta: { title: '提示词管理' } },
+    { path: '/user-prompts', component: UserPromptsView, meta: { title: '用户提示词' } }
   ]
 })
 

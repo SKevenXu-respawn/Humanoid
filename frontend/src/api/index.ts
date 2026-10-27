@@ -94,7 +94,13 @@ export const api = {
   prompts: () => http.get('/prompts').then((r) => r.data),
   savePrompt: (key: string, content: string) =>
     http.put(`/prompts/${key}`, { content }).then((r) => r.data),
-  resetPrompt: (key: string) => http.delete(`/prompts/${key}`).then((r) => r.data)
+  resetPrompt: (key: string) => http.delete(`/prompts/${key}`).then((r) => r.data),
+
+  userPrompts: (q?: string) =>
+    http.get('/user-prompts', { params: { q } }).then((r) => r.data),
+  saveUserPrompt: (userId: number, content: string) =>
+    http.put(`/user-prompts/${userId}`, { content }).then((r) => r.data),
+  deleteUserPrompt: (userId: number) => http.delete(`/user-prompts/${userId}`)
 }
 
 export const imageUrl = (id: number) => `/api/admin/images/${id}`

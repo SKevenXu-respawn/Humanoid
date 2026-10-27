@@ -53,18 +53,21 @@ public class DeepSeekClient {
     private final boolean thinkingEnabled;
     private final String reasoningEffort;
     private final int maxToolRounds;
+    private final int readTimeoutSeconds;
 
     public DeepSeekClient(ImageDataLoader imageDataLoader,
                           SecretService secretService,
                           @Value("${spring.ai.deepseek.base-url:https://api.deepseek.com}") String baseUrl,
                           @Value("${spring.ai.deepseek.chat.options.model:deepseek-flash}") String model,
                           @Value("${humanoid.ai.thinking:disabled}") String thinking,
-                          @Value("${humanoid.ai.max-tool-rounds:25}") int maxToolRounds) {
+                          @Value("${humanoid.ai.max-tool-rounds:25}") int maxToolRounds,
+                          @Value("${humanoid.ai.http-read-timeout-seconds:180}") int readTimeoutSeconds) {
         this.imageDataLoader = imageDataLoader;
         this.secretService = secretService;
         this.baseUrl = baseUrl.endsWith("/") ? baseUrl.substring(0, baseUrl.length() - 1) : baseUrl;
         this.model = model;
         this.maxToolRounds = maxToolRounds;
+        this.readTimeoutSeconds = Math.max(10, readTimeoutSeconds);
         String level = thinking == null ? "disabled" : thinking.trim().toLowerCase();
         if ("disabled".equals(level)) {
             this.thinkingEnabled = false;
@@ -209,7 +212,7 @@ public class DeepSeekClient {
             throw new IllegalStateException("未配置 DeepSeek API Key，请在管理端密钥配置中设置");
         }
         HttpRequest request = HttpRequest.newBuilder(URI.create(baseUrl + "/chat/completions"))
-                .timeout(Duration.ofSeconds(90))
+                .timeout(Duration.ofSeconds(readTimeoutSeconds))
                 .header("Content-Type", "application/json")
                 .header("Authorization", "Bearer " + apiKey)
                 .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
