@@ -1,13 +1,12 @@
 # Humanoid Flutter
 
-预留的 Flutter 客户端目录，尚未初始化。
-
-初始化方式（任选其一）：
+Humanoid 的 Flutter 桌面客户端，目前仅启用 Windows 平台。
 
 ```bash
-# 在当前目录初始化
-flutter create --project-name humanoid_flutter .
-
-# 或先创建到临时目录，再把文件合并进来
-flutter create humanoid_flutter_tmp
+flutter run -d windows     # 开发运行
+flutter build windows      # 构建发布包（build/windows/x64/runner/Release/）
 ```
+
+- 项目名：`humanoid_flutter`
+- 平台：`windows`（未生成 Android / iOS / Web / macOS / Linux 目录）
+- 环境：Flutter 3.47.2 / Dart 3.13.2
