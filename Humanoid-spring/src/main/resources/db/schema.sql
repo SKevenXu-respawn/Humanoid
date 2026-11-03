@@ -213,6 +213,7 @@ CREATE TABLE IF NOT EXISTS bot_prompt (
 CREATE TABLE IF NOT EXISTS bot_secret (
     id           BIGINT       NOT NULL AUTO_INCREMENT,
     secret_key   VARCHAR(64)  NOT NULL COMMENT '配置键，如 deepseek_api_key',
+    secret_name  VARCHAR(64)  NOT NULL COMMENT '配置名',
     secret_value VARCHAR(2000) NOT NULL COMMENT '密钥明文（仅服务端可见）',
     updated_at   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
