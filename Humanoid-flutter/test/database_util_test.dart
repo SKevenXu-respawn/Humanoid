@@ -67,6 +67,7 @@ void main() {
       'deepseek_key': 'sk-test',
       'llonebot_key': 'll-test',
       'speech_key': 'sp-test',
+      'brave_key': 'br-test',
     });
     expect(await util.missingSecretKeys(), isEmpty);
     expect(await util.getSecretValue('llonebot_key'), 'll-test');
