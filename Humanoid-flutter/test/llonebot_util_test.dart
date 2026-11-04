@@ -24,6 +24,10 @@ void main() {
       LLOneBotUtil.instance.authTokenPath.replaceAll('\\', '/'),
       endsWith('/llonebot/bin/llbot/data/auth_token.txt'),
     );
+    expect(
+      LLOneBotUtil.instance.defaultConfigPath.replaceAll('\\', '/'),
+      endsWith('/llonebot/bin/llbot/default_config.json'),
+    );
   });
 
   test('写入 LLOneBot Auth Token', () async {
@@ -34,5 +38,24 @@ void main() {
     await LLOneBotUtil.instance.writeAuthToken('  token-value  ', path: path);
 
     expect(await File(path).readAsString(), 'token-value');
+  });
+
+  test('校验并写入默认配置', () async {
+    final dir = await Directory.systemTemp.createTemp('humanoid_llonebot_cfg_');
+    addTearDown(() => dir.delete(recursive: true));
+    final path = p.join(dir.path, 'default_config.json');
+
+    await LLOneBotUtil.instance.writeDefaultConfig(
+      '{"webui":{"enable":true}}',
+      path: path,
+    );
+    final written = await File(path).readAsString();
+    expect(written, contains('"enable": true'));
+    expect(written, contains('\n'));
+
+    await expectLater(
+      LLOneBotUtil.instance.writeDefaultConfig('not json', path: path),
+      throwsA(isA<FormatException>()),
+    );
   });
 }

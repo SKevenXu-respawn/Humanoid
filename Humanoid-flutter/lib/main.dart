@@ -2,21 +2,23 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:humanoid_flutter/config/AppColors.dart';
 import 'package:humanoid_flutter/config/AppConfig.dart';
 import 'package:humanoid_flutter/models/mainDrawModels.dart';
-import 'package:humanoid_flutter/pages/home/home_page.dart';
 import 'package:humanoid_flutter/utils/database_util.dart';
+import 'package:humanoid_flutter/utils/bot/bot_service.dart';
 import 'package:humanoid_flutter/utils/terminal/terminal_util.dart';
 import 'package:humanoid_flutter/utils/wsl/wsl_utils.dart';
 import 'package:humanoid_flutter/widgets/mainDraw.dart';
+import 'package:humanoid_flutter/widgets/qr_login_dialog.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await DatabaseUtil.instance.init();
   await WslUtils.instance.init();
   unawaited(TerminalUtil.instance.start());
+  await BotService.instance.start();
   runApp(const HumanoidApp());
 }
 
@@ -31,12 +33,20 @@ class _HumanoidAppState extends State<HumanoidApp> {
 
   MainDrawModels _currentModel=AppConfig.mainDrawList.first;
   late final AppLifecycleListener _lifecycleListener;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _qrDialogOpen = false;
+  bool _openingWebUi = false;
 
   @override
   void initState() {
     super.initState();
     _lifecycleListener = AppLifecycleListener(
       onExitRequested: () async {
+        try {
+          await BotService.instance.stop();
+        } catch (_) {
+          // ignore bot cleanup errors on exit
+        }
         try {
           await TerminalUtil.instance.stop();
         } catch (_) {
@@ -45,17 +55,77 @@ class _HumanoidAppState extends State<HumanoidApp> {
         return AppExitResponse.exit;
       },
     );
+    TerminalUtil.instance.qrCodeNotifier.addListener(_handleQrCode);
+    TerminalUtil.instance.webUiUrlNotifier.addListener(_handleWebUi);
   }
 
   @override
   void dispose() {
+    TerminalUtil.instance.qrCodeNotifier.removeListener(_handleQrCode);
+    TerminalUtil.instance.webUiUrlNotifier.removeListener(_handleWebUi);
     _lifecycleListener.dispose();
     super.dispose();
+  }
+
+  void _handleQrCode() {
+    final info = TerminalUtil.instance.qrCodeNotifier.value;
+    if (info == null || _qrDialogOpen) {
+      return;
+    }
+    final context = _navigatorKey.currentContext;
+    if (context == null) {
+      return;
+    }
+    _qrDialogOpen = true;
+    showDialog<void>(
+      context: context,
+      builder: (context) => const QrLoginDialog(),
+    ).whenComplete(() {
+      _qrDialogOpen = false;
+    });
+  }
+
+  void _handleWebUi() {
+    final url = TerminalUtil.instance.webUiUrlNotifier.value;
+    if (url == null || _openingWebUi) {
+      return;
+    }
+    _openingWebUi = true;
+    unawaited(_openWebUi(url));
+  }
+
+  Future<void> _openWebUi(String url) async {
+    try {
+      final ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (ok) {
+        _showSnack('WebUI 已启动，正在打开浏览器');
+      } else {
+        _showSnack('无法打开 WebUI: $url');
+      }
+    } catch (e) {
+      _showSnack('无法打开 WebUI: $e');
+    } finally {
+      _openingWebUi = false;
+    }
+  }
+
+  void _showSnack(String message) {
+    final context = _navigatorKey.currentContext;
+    if (context == null) {
+      return;
+    }
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: _navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Humanoid',
       theme: ThemeData(
@@ -93,7 +163,7 @@ class _HumanoidAppState extends State<HumanoidApp> {
               child: BackdropFilter(
                 filter: ImageFilter.blur(sigmaX: 10.0, sigmaY: 10.0),
                 child: Container(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                 ),
               ),
             ),

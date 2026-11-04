@@ -264,6 +264,7 @@ class _LogsPageState extends State<LogsPage> {
       TerminalLogType.stdout => Colors.white.withValues(alpha: 0.82),
       TerminalLogType.stderr => const Color(0xFFFF8A80),
       TerminalLogType.system => Colors.white.withValues(alpha: 0.42),
+      TerminalLogType.bot => const Color(0xFF34D399),
     };
   }
 }

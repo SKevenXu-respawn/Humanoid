@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -48,6 +49,29 @@ class LLOneBotUtil {
 
   String get authTokenPath =>
       p.join(installPath, 'bin', 'llbot', 'data', 'auth_token.txt');
+
+  String get defaultConfigPath =>
+      p.join(installPath, 'bin', 'llbot', 'default_config.json');
+
+  Future<String> readDefaultConfig({String? path}) async {
+    final file = File(path ?? defaultConfigPath);
+    if (!await file.exists()) {
+      throw StateError('默认配置文件不存在: ${file.path}');
+    }
+    return file.readAsString();
+  }
+
+  Future<void> writeDefaultConfig(String content, {String? path}) async {
+    final decoded = jsonDecode(content);
+    if (decoded is! Map) {
+      throw const FormatException('默认配置必须是 JSON 对象');
+    }
+    final pretty = JsonEncoder.withIndent('  ').convert(decoded);
+    final file = File(path ?? defaultConfigPath);
+    await file.parent.create(recursive: true);
+    await file.writeAsString(pretty, flush: true);
+    _log('默认配置已更新: ${file.path}');
+  }
 
   Future<void> writeAuthToken(String token, {String? path}) async {
     final value = token.trim();

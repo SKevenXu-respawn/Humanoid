@@ -6,13 +6,39 @@ import 'package:flutter/foundation.dart';
 
 enum TerminalStatus { stopped, starting, running, stopping, error }
 
-enum TerminalLogType { command, stdout, stderr, system }
+enum TerminalLogType { command, stdout, stderr, system, bot }
 
 class TerminalLogEntry {
   final TerminalLogType type;
   final String text;
 
   const TerminalLogEntry(this.type, this.text);
+}
+
+class QrCodeInfo {
+  final String? localPath;
+  final String? url;
+  final DateTime createdAt;
+
+  const QrCodeInfo({
+    this.localPath,
+    this.url,
+    required this.createdAt,
+  });
+
+  String? get windowsPath {
+    final path = localPath;
+    if (path == null || path.isEmpty) {
+      return null;
+    }
+    final match = RegExp(r'^/mnt/([a-zA-Z])/(.*)$').firstMatch(path);
+    if (match == null) {
+      return path;
+    }
+    final drive = match.group(1)!.toUpperCase();
+    final rest = match.group(2)!.replaceAll('/', '\\');
+    return '$drive:\\$rest';
+  }
 }
 
 class TerminalUtil {
@@ -23,14 +49,31 @@ class TerminalUtil {
   static const _tag = '[Terminal]';
   static const _maxLogs = 2000;
 
+  static final _ansiPattern = RegExp(r'\x1B\[[0-9;?]*[ -/]*[@-~]');
+  static final _qrFilePathPattern = RegExp(r'二维码文件已保存[:：]\s*(.+)$');
+  static final _qrUrlPattern = RegExp(r'二维码网址[:：]\s*(\S+)');
+  static final _loginStatePattern = RegExp(
+    r'\[PMHQ login\].*listener\.onLoginState\s*1\b',
+  );
+  static final _webUiPattern = RegExp(
+    r'webui\s*服务器已启动\s+(\S+)',
+    caseSensitive: false,
+  );
+
   final ValueNotifier<TerminalStatus> statusNotifier =
       ValueNotifier(TerminalStatus.stopped);
   final ValueNotifier<List<TerminalLogEntry>> logsNotifier =
       ValueNotifier(const <TerminalLogEntry>[]);
+  final ValueNotifier<QrCodeInfo?> qrCodeNotifier =
+      ValueNotifier<QrCodeInfo?>(null);
+  final ValueNotifier<bool> loginSuccessNotifier = ValueNotifier(false);
+  final ValueNotifier<String?> webUiUrlNotifier = ValueNotifier<String?>(null);
 
   Process? _process;
   IOSink? _stdin;
   Future<void> _queue = Future.value();
+  String? _qrLocalPath;
+  String? _qrUrl;
 
   bool get isRunning => _process != null;
 
@@ -58,6 +101,11 @@ class TerminalUtil {
       return;
     }
 
+    _qrLocalPath = null;
+    _qrUrl = null;
+    qrCodeNotifier.value = null;
+    loginSuccessNotifier.value = false;
+    webUiUrlNotifier.value = null;
     statusNotifier.value = TerminalStatus.starting;
     _appendSystem('正在启动终端...');
 
@@ -185,6 +233,10 @@ class TerminalUtil {
     logsNotifier.value = const <TerminalLogEntry>[];
   }
 
+  void appendBotLog(String text) {
+    _append(TerminalLogType.bot, text);
+  }
+
   void _appendSystem(String text) {
     _append(TerminalLogType.system, text);
   }
@@ -194,11 +246,96 @@ class TerminalUtil {
       return;
     }
 
+    final clean = text.replaceAll(_ansiPattern, '');
+    if (clean.isEmpty) {
+      return;
+    }
+
     final next = List<TerminalLogEntry>.from(logsNotifier.value)
-      ..add(TerminalLogEntry(type, text));
+      ..add(TerminalLogEntry(type, clean));
     if (next.length > _maxLogs) {
       next.removeRange(0, next.length - _maxLogs);
     }
     logsNotifier.value = next;
+    _detectQrCode(clean);
+    _detectLoginSuccess(clean);
+    _detectWebUi(clean);
+  }
+
+  static String? parseWebUiLine(String line) {
+    final clean = line.replaceAll(_ansiPattern, '');
+    final match = _webUiPattern.firstMatch(clean);
+    if (match == null) {
+      return null;
+    }
+    final address = match
+        .group(1)!
+        .trim()
+        .replaceAll(RegExp(r'[.,;，。；]+$'), '');
+    if (address.isEmpty) {
+      return null;
+    }
+    if (address.startsWith('http://') || address.startsWith('https://')) {
+      return address;
+    }
+    return 'http://$address';
+  }
+
+  void _detectWebUi(String line) {
+    final url = parseWebUiLine(line);
+    if (url == null) {
+      return;
+    }
+    if (webUiUrlNotifier.value == url) {
+      webUiUrlNotifier.value = null;
+    }
+    webUiUrlNotifier.value = url;
+    _log('检测到 WebUI 地址: $url');
+  }
+
+  static bool isLoginSuccessLog(String line) {
+    final clean = line.replaceAll(_ansiPattern, '');
+    return _loginStatePattern.hasMatch(clean);
+  }
+
+  void _detectLoginSuccess(String line) {
+    if (!isLoginSuccessLog(line) || loginSuccessNotifier.value) {
+      return;
+    }
+    loginSuccessNotifier.value = true;
+    _log('检测到 QQ 登录成功');
+  }
+
+  static ({String? path, String? url}) parseQrCodeLine(String line) {
+    final clean = line.replaceAll(_ansiPattern, '');
+    final fileMatch = _qrFilePathPattern.firstMatch(clean);
+    final urlMatch = _qrUrlPattern.firstMatch(clean);
+    return (
+      path: fileMatch?.group(1)?.trim(),
+      url: urlMatch?.group(1)?.trim(),
+    );
+  }
+
+  void _detectQrCode(String line) {
+    final parsed = parseQrCodeLine(line);
+    if (parsed.path == null && parsed.url == null) {
+      return;
+    }
+
+    loginSuccessNotifier.value = false;
+    if (parsed.path != null && parsed.path!.isNotEmpty) {
+      _qrLocalPath = parsed.path;
+      _log('检测到登录二维码文件');
+    }
+    if (parsed.url != null && parsed.url!.isNotEmpty) {
+      _qrUrl = parsed.url;
+      _log('检测到登录二维码地址');
+    }
+
+    qrCodeNotifier.value = QrCodeInfo(
+      localPath: _qrLocalPath,
+      url: _qrUrl,
+      createdAt: DateTime.now(),
+    );
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:humanoid_flutter/config/AppEnum.dart';
+import 'package:humanoid_flutter/pages/home/widgets/edit_default_config_dialog.dart';
 import 'package:humanoid_flutter/pages/home/widgets/home_item_title.dart';
 import 'package:humanoid_flutter/pages/home/widgets/status_cards.dart';
 import 'package:humanoid_flutter/utils/llonebot/llonebot_util.dart';
@@ -59,6 +60,18 @@ class _HomeLLOneBotSectionState extends State<HomeLLOneBotSection> {
 
     if (confirmed == true) {
       await _startInstall(reinstall: true);
+    }
+  }
+
+  Future<void> _openDefaultConfigEditor() async {
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => const EditDefaultConfigDialog(),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('默认配置已保存，重启 LLOneBot 后生效')),
+      );
     }
   }
 
@@ -153,7 +166,7 @@ class _HomeLLOneBotSectionState extends State<HomeLLOneBotSection> {
                   ),
                 ),
               ),
-            if (status == LLOneBotStatus.installed)
+            if (status == LLOneBotStatus.installed) ...[
               OutlinedButton.icon(
                 onPressed: _installing ? null : _confirmReinstall,
                 icon: const Icon(Icons.delete_forever_rounded, size: 18),
@@ -168,6 +181,21 @@ class _HomeLLOneBotSectionState extends State<HomeLLOneBotSection> {
                   ),
                 ),
               ),
+              OutlinedButton.icon(
+                onPressed: _installing ? null : _openDefaultConfigEditor,
+                icon: const Icon(Icons.tune_rounded, size: 18),
+                label: const Text('编辑默认配置'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _accent,
+                  backgroundColor: Colors.white.withValues(alpha: 0.55),
+                  side: BorderSide(color: _accent.withValues(alpha: 0.35)),
+                  minimumSize: const Size.fromHeight(46),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+              ),
+            ],
             Text(
               '安装目录：${LLOneBotUtil.instance.installPath}',
               maxLines: 1,

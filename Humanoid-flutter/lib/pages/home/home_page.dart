@@ -4,6 +4,7 @@ import 'package:device_inspector/device_inspector.dart';
 import 'package:flutter/material.dart';
 import 'package:humanoid_flutter/config/AppEnum.dart';
 import 'package:humanoid_flutter/pages/home/widgets/home_device_info_card.dart';
+import 'package:humanoid_flutter/pages/home/widgets/home_bot_section.dart';
 import 'package:humanoid_flutter/pages/home/widgets/home_item_title.dart';
 import 'package:humanoid_flutter/pages/home/widgets/home_llonebot_section.dart';
 import 'package:humanoid_flutter/pages/home/widgets/status_cards.dart';
@@ -21,6 +22,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   bool _isRefreshingWsl = false;
   bool _isInstallingWsl = false;
+  bool _isApplyingMirror = false;
   bool _isRefreshingDb = false;
 
   final ValueNotifier<double> cpuNotifier =
@@ -76,6 +78,49 @@ class _HomePageState extends State<HomePage> {
   }
 
 
+  Future<void> _applyMirroredNetwork() async {
+    if (_isApplyingMirror) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('启用 WSL 镜像网络？'),
+        content: const Text('这会重启 WSL，正在运行的 LLBot、PMHQ 和 QQ 会被停止，需要重新启动 LLBot。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('继续'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+
+    setState(() => _isApplyingMirror = true);
+    try {
+      await WslUtils.instance.ensureMirroredNetworking(forceRestart: true);
+      await WslUtils.instance.refreshStatus();
+    } finally {
+      if (mounted) {
+        setState(() => _isApplyingMirror = false);
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    final mode = WslUtils.instance.networkingModeNotifier.value;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('WSL 网络模式：${mode ?? '未知'}')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,6 +172,35 @@ class _HomePageState extends State<HomePage> {
                             ),
                           ),
                         ),
+                      ValueListenableBuilder<String?>(
+                        valueListenable:
+                            WslUtils.instance.networkingModeNotifier,
+                        builder: (context, mode, child) {
+                          if (mode == null || mode == 'mirrored') {
+                            return const SizedBox.shrink();
+                          }
+                          return OutlinedButton.icon(
+                            onPressed: _isApplyingMirror
+                                ? null
+                                : _applyMirroredNetwork,
+                            icon: const Icon(Icons.sync_rounded, size: 18),
+                            label: Text('启用 WSL 镜像网络（当前 $mode）'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF3B82F6),
+                              backgroundColor:
+                                  Colors.white.withValues(alpha: 0.55),
+                              side: BorderSide(
+                                color: const Color(0xFF3B82F6)
+                                    .withValues(alpha: 0.35),
+                              ),
+                              minimumSize: const Size.fromHeight(46),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   );
                 },
@@ -154,6 +228,7 @@ class _HomePageState extends State<HomePage> {
                   );
                 },
               ),
+              const HomeBotSection(),
               HomeItemTitle(
                 title: '机器信息',
               ),

@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../config/AppEnum.dart';
+import '../terminal/terminal_util.dart';
 
 class WslUtils {
   WslUtils._();
@@ -13,15 +15,21 @@ class WslUtils {
   final ValueNotifier<WslStatus> statusNotifier = ValueNotifier(
     WslStatus.uninstall,
   );
+  final ValueNotifier<String?> networkingModeNotifier =
+      ValueNotifier<String?>(null);
 
   static String? detectedUbuntuDistro;
 
   static const _tag = '[WSL]';
 
-  static void _log(String message) => debugPrint('$_tag $message');
+  static void _log(String message) {
+    debugPrint('$_tag $message');
+    TerminalUtil.instance.appendBotLog(message);
+  }
 
   Future<void> init() async {
     _log('WslUtils 正在初始化...');
+    await ensureMirroredNetworking();
     final status = await checkInstallStatus();
     statusNotifier.value = status;
     _log('WslUtils 初始化完成，状态: ${status.title}');
@@ -83,6 +91,184 @@ class WslUtils {
       _log('提权或执行失败: $e');
       return WslStatus.uninstall;
     }
+  }
+
+  Future<void> ensureMirroredNetworking({bool forceRestart = false}) async {
+    final mode = await _queryNetworkingMode();
+    networkingModeNotifier.value = mode;
+    if (mode == 'mirrored') {
+      try {
+        final marker = _mirrorFailedMarker();
+        if (marker != null && await marker.exists()) {
+          await marker.delete();
+        }
+      } catch (_) {
+        // ignore marker cleanup errors
+      }
+      _log('WSL 网络模式: mirrored');
+      return;
+    }
+    if (mode == null) {
+      _log('无法检测 WSL 网络模式，跳过镜像网络配置');
+      return;
+    }
+
+    final configFile = _wslConfigFile();
+    final marker = _mirrorFailedMarker();
+    if (configFile == null) {
+      _log('无法定位 .wslconfig，跳过镜像网络配置');
+      return;
+    }
+    if (!forceRestart && marker != null && await marker.exists()) {
+      _log('WSL 镜像网络上次切换未生效，跳过自动重启（可在 WSL 环境页手动重试）');
+      return;
+    }
+
+    final original = await configFile.exists()
+        ? await configFile.readAsString()
+        : null;
+    final hasMirrorConfig = original != null &&
+        RegExp(
+          r'^\s*networkingMode\s*=\s*mirrored\s*$',
+          caseSensitive: false,
+          multiLine: true,
+        ).hasMatch(original);
+
+    if (!hasMirrorConfig) {
+      final updated = applyMirroredConfig(original ?? '');
+      try {
+        await configFile.writeAsString(updated, flush: true);
+        _log('已写入 .wslconfig: networkingMode=mirrored');
+      } catch (e) {
+        _log('写入 .wslconfig 失败: $e');
+        return;
+      }
+    } else {
+      _log('WSL 配置已是 mirrored，正在重启 WSL 使其生效...');
+    }
+
+    _log('正在重启 WSL...');
+    await Process.run('wsl', ['--shutdown']);
+    await Future<void>.delayed(const Duration(seconds: 3));
+
+    final verify = await _queryNetworkingMode();
+    networkingModeNotifier.value = verify;
+    if (verify == 'mirrored') {
+      try {
+        if (marker != null && await marker.exists()) {
+          await marker.delete();
+        }
+      } catch (_) {
+        // ignore marker cleanup errors
+      }
+      _log('WSL 镜像网络已启用');
+      return;
+    }
+
+    if (marker != null) {
+      try {
+        await marker.writeAsString(DateTime.now().toIso8601String());
+      } catch (_) {
+        // ignore marker write errors
+      }
+    }
+
+    if (verify == null) {
+      _log('重启后无法检测 WSL，回滚 .wslconfig');
+      try {
+        if (original == null) {
+          await configFile.delete();
+        } else {
+          await configFile.writeAsString(original, flush: true);
+        }
+      } catch (e) {
+        _log('回滚 .wslconfig 失败: $e');
+      }
+      await Process.run('wsl', ['--shutdown']);
+      return;
+    }
+
+    _log('WSL 镜像网络未生效（当前=$verify），配置已保留；可手动重试');
+  }
+
+  static File? _mirrorFailedMarker() {
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (home == null || home.trim().isEmpty) {
+      return null;
+    }
+    return File(p.join(home, '.humanoid_wsl_mirror_failed'));
+  }
+
+  static Future<String?> _queryNetworkingMode() async {
+    try {
+      final result = await Process.run(
+        'wsl',
+        const ['--exec', 'wslinfo', '--networking-mode'],
+        stdoutEncoding: utf8,
+        stderrEncoding: utf8,
+      );
+      if (result.exitCode != 0) {
+        return null;
+      }
+      final output = result.stdout.toString().trim().toLowerCase();
+      return output.isEmpty ? null : output;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static File? _wslConfigFile() {
+    final home =
+        Platform.environment['USERPROFILE'] ?? Platform.environment['HOME'];
+    if (home == null || home.trim().isEmpty) {
+      return null;
+    }
+    return File(p.join(home, '.wslconfig'));
+  }
+
+  static String applyMirroredConfig(String input) {
+    var content = input.replaceAll('\r\n', '\n');
+    if (content.startsWith(String.fromCharCode(0xFEFF))) {
+      content = content.substring(1);
+    }
+    final lines = content.split('\n');
+    var sectionIndex = -1;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].trim().toLowerCase() == '[wsl2]') {
+        sectionIndex = i;
+        break;
+      }
+    }
+
+    if (sectionIndex == -1) {
+      final prefix = content.trim().isEmpty ? '' : '${content.trimRight()}\n\n';
+      return '$prefix[wsl2]\nnetworkingMode=mirrored\n';
+    }
+
+    var sectionEnd = lines.length;
+    for (var i = sectionIndex + 1; i < lines.length; i++) {
+      if (lines[i].trim().startsWith('[')) {
+        sectionEnd = i;
+        break;
+      }
+    }
+
+    var replaced = false;
+    for (var i = sectionIndex + 1; i < sectionEnd; i++) {
+      if (RegExp(
+        r'^\s*networkingMode\s*=',
+        caseSensitive: false,
+      ).hasMatch(lines[i])) {
+        lines[i] = 'networkingMode=mirrored';
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      lines.insert(sectionIndex + 1, 'networkingMode=mirrored');
+    }
+    return lines.join('\n');
   }
 
   static Future<WslStatus> checkStatus() async {
