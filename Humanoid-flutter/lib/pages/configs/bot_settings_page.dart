@@ -19,6 +19,7 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
   static const _danger = Color(0xFFEF4444);
 
   final _llbotApiBase = TextEditingController();
+  final _botQq = TextEditingController();
   final _eventPort = TextEditingController();
   final _deepseekBase = TextEditingController();
   final _deepseekModel = TextEditingController();
@@ -52,6 +53,7 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
   void dispose() {
     for (final controller in [
       _llbotApiBase,
+      _botQq,
       _eventPort,
       _deepseekBase,
       _deepseekModel,
@@ -83,6 +85,8 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
       _llbotApiBase.text =
           await DatabaseUtil.instance.getSetting('llbot_api_base') ??
               'http://127.0.0.1:3000';
+      _botQq.text =
+          await DatabaseUtil.instance.getSetting('bot_qq') ?? '';
       _eventPort.text =
           await DatabaseUtil.instance.getSetting('bot_event_port') ?? '13001';
       _deepseekBase.text =
@@ -161,6 +165,7 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
     try {
       final util = DatabaseUtil.instance;
       await util.setSetting('llbot_api_base', _llbotApiBase.text.trim());
+      await util.setSetting('bot_qq', _botQq.text.trim());
       await util.setSetting('bot_event_port', _eventPort.text.trim());
       await util.setSetting('deepseek_base_url', _deepseekBase.text.trim());
       await util.setSetting('deepseek_model', _deepseekModel.text.trim());
@@ -362,6 +367,11 @@ class _BotSettingsPageState extends State<BotSettingsPage> {
       children: [
         const _SectionTitle('连接与模型'),
         _field('LLBot API 地址', _llbotApiBase, hint: 'http://127.0.0.1:3000'),
+        _field(
+          '机器人 QQ 号（自动登录）',
+          _botQq,
+          hint: '首次扫码登录，之后启动自动复用登录态',
+        ),
         _field('事件监听端口', _eventPort, hint: '13001'),
         _field('DeepSeek Base URL', _deepseekBase, hint: 'https://api.deepseek.com'),
         _field('DeepSeek 模型', _deepseekModel, hint: 'deepseek-flash'),

@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../../config/AppEnum.dart';
+import '../database_util.dart';
 import '../wsl/wsl_utils.dart';
 
 enum LLOneBotInstallStage { downloading, extracting, done, failed }
@@ -92,11 +93,19 @@ class LLOneBotUtil {
     return path;
   }
 
-  String get wslStartCommand {
-    final directory = toWslPath(installPath);
+  String get wslStartCommand => _buildWslStartCommand(null);
+
+  Future<String> buildWslStartCommand() async {
+    final qq = (await DatabaseUtil.instance.getSetting('bot_qq'))?.trim() ?? '';
+    return _buildWslStartCommand(qq.isEmpty ? null : qq);
+  }
+
+  static String _buildWslStartCommand(String? qq) {
+    final directory = toWslPath(LLOneBotUtil.instance.installPath);
     final distro = WslUtils.detectedUbuntuDistro ?? 'Ubuntu';
+    final qqArg = qq == null || qq.isEmpty ? '' : ' --qq=$qq';
     return 'wsl -d $distro bash -lc "cd \'$directory\' && '
-        'chmod +x start.sh && ./start.sh --headed --shell"';
+        'chmod +x start.sh && ./start.sh --headed --shell$qqArg"';
   }
 
   static void _log(String message) => debugPrint('$_tag $message');

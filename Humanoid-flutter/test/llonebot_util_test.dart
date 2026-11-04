@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:humanoid_flutter/utils/database_util.dart';
 import 'package:humanoid_flutter/utils/llonebot/llonebot_util.dart';
 import 'package:path/path.dart' as p;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   test('Windows 路径转换为 WSL 路径并生成启动命令', () {
@@ -28,6 +30,15 @@ void main() {
       LLOneBotUtil.instance.defaultConfigPath.replaceAll('\\', '/'),
       endsWith('/llonebot/bin/llbot/default_config.json'),
     );
+  });
+
+  test('配置机器人 QQ 后启动命令带 --qq 快速登录参数', () async {
+    await DatabaseUtil.instance.init(path: inMemoryDatabasePath);
+    addTearDown(DatabaseUtil.instance.close);
+    await DatabaseUtil.instance.setSetting('bot_qq', '123456789');
+
+    final command = await LLOneBotUtil.instance.buildWslStartCommand();
+    expect(command, contains('--headed --shell --qq=123456789'));
   });
 
   test('写入 LLOneBot Auth Token', () async {

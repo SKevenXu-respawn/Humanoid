@@ -211,7 +211,7 @@ class _MainDrawState extends State<MainDraw> {
       }
 
       await TerminalUtil.instance.sendCommand(
-        LLOneBotUtil.instance.wslStartCommand,
+        await LLOneBotUtil.instance.buildWslStartCommand(),
       );
       if (!mounted) {
         return;
