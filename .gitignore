@@ -15,3 +15,6 @@ Humanoid-flutter/.dart_tool/
 Humanoid-flutter/build/
 Humanoid-flutter/.flutter-plugins
 Humanoid-flutter/.flutter-plugins-dependencies
+
+#docs
+Humanoid-spring/docs/db_data/
