@@ -23,8 +23,9 @@ void main() {
     expect(find.text('DeepSeek Key'), findsOneWidget);
     expect(find.text('LLOneBot Key'), findsOneWidget);
     expect(find.text('语音服务 Key'), findsOneWidget);
-    expect(find.text('获取 Key'), findsNWidgets(3));
-    expect(find.byType(TextField), findsNWidgets(3));
+    expect(find.text('Brave Search Key'), findsOneWidget);
+    expect(find.text('获取 Key'), findsNWidgets(4));
+    expect(find.byType(TextField), findsNWidgets(4));
     expect(find.text('请先填写缺失的密钥'), findsOneWidget);
     expect(find.text('必填'), findsOneWidget);
 

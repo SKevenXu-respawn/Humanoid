@@ -231,3 +231,57 @@ enum LLOneBotStatus implements AppStatus {
     this.shouldPulse,
   );
 }
+
+enum BotStatus implements AppStatus {
+  stopped(
+    '已停止',
+    Color(0xFF94A3B8),
+    Icons.power_settings_new_rounded,
+    'QQ 机器人服务未启动',
+    false,
+  ),
+  starting(
+    '启动中',
+    Color(0xFF3B82F6),
+    Icons.autorenew_rounded,
+    '正在启动 QQ 机器人服务',
+    true,
+  ),
+  running(
+    '运行中',
+    Color(0xFF22C55E),
+    Icons.smart_toy_rounded,
+    '正在监听 LLOneBot 事件并处理消息',
+    true,
+  ),
+  error(
+    '异常',
+    Color(0xFFEF4444),
+    Icons.error_rounded,
+    'QQ 机器人服务启动失败，请查看日志',
+    false,
+  );
+
+  @override
+  final String title;
+
+  @override
+  final Color color;
+
+  @override
+  final IconData icon;
+
+  @override
+  final String hint;
+
+  @override
+  final bool shouldPulse;
+
+  const BotStatus(
+    this.title,
+    this.color,
+    this.icon,
+    this.hint,
+    this.shouldPulse,
+  );
+}

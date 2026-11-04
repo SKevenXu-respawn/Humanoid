@@ -18,6 +18,7 @@ class _ConfigsPageState extends State<ConfigsPage> {
     'deepseek_key': 'DeepSeek Key',
     'llonebot_key': 'LLOneBot Key',
     'speech_key': '语音服务 Key',
+    'brave_key': 'Brave Search Key',
   };
 
   bool _loading = true;
